@@ -1,0 +1,9 @@
+﻿*.swp
+*.sdf
+*.suo
+*.opensdf
+*.user
+Debug/*
+Release/*
+LuaZMQ/Debug/*
+luaZMQ/Release/*
