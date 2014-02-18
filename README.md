@@ -13,6 +13,7 @@ To build and use LuaZMQ successfully you need:
 * ZeroMQ 4.0.x+
 * A standards-compliant C++ complier. (Visual Studio 2012 is preferred)
 * Lua 5.1.x, LuaJIT 2.0.x
+* Lutok - https://github.com/soulik/lutok
 * update lua5.1.props so that you've got correct paths for Lua header and library files
 
 Authors
