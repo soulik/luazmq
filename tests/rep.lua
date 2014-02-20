@@ -1,16 +1,20 @@
 ﻿local zmq = require 'zmq'
 
-local context, msg = assert(zmq.context())
-local socket,msg = assert(context.socket(zmq.ZMQ_REP))
-local result, msg = assert(socket.bind("tcp://*:12345"))
+local context = assert(zmq.context())
+local socket = assert(context.socket(zmq.ZMQ_REP))
+assert(socket.bind("tcp://*:12345"))
 
 local poll = zmq.poll()
 	
 poll.add(socket, zmq.ZMQ_POLLIN, function(socket)
 	local result = assert(socket.recvAll())
-	local data = "Hello: "..socket.options.identity..". This is a reply to: "..result
-	socket.send(data)
-	print('Received: ', result, 'from: ', socket.options.identity)
+	local identity = socket.options.identity
+	local data = "Hello: "..identity..". This is a reply to: "..result
+
+	print('Received: ', result, 'from: ', identity)
+	
+	assert(socket.send(data))
+
 end)
 
 while true do
