@@ -21,7 +21,7 @@ To build and use LuaZMQ successfully you need:
 Usage
 =====
 
-# Req part without polling
+## Req part without polling
 
 ```lua
 local zmq = require 'zmq'
@@ -41,7 +41,7 @@ socket.diconnect()
 
 ```
 
-# Rep part with polling
+## Rep part with polling
 
 ```lua
 local zmq = require 'zmq'
