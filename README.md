@@ -49,9 +49,6 @@ local zmq = require 'zmq'
 local context = assert(zmq.context())
 local socket = assert(context.socket(zmq.ZMQ_REP))
 
-socket.options.identity = "A client #1"
-
-assert(socket.connect("tcp://localhost:12345"))
 assert(socket.bind("tcp://*:12345"))
 
 local poll = zmq.poll()
