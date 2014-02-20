@@ -7,12 +7,10 @@ local result, msg = assert(socket.bind("tcp://*:12345"))
 local poll = zmq.poll()
 	
 poll.add(socket, zmq.ZMQ_POLLIN, function(socket)
-	local result, msg = socket.recvAll()
-	if result then
-		local data = "Hello: "..result
-		socket.send(data)
-		print(result, data, 'from: ', string.format("%q",socket.options.identity))
-	end
+	local result = assert(socket.recvAll())
+	local data = "Hello: "..socket.options.identity..". This is a reply to: "..result
+	socket.send(data)
+	print('Received: ', result, 'from: ', socket.options.identity)
 end)
 
 while true do

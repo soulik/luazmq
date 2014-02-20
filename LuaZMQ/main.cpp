@@ -51,6 +51,19 @@ namespace LuaZMQ {
 		return 0;
 	}
 
+	int lua_zmqThread(lutok::state & state){
+		int parameters_count = state.get_top();
+		if ((parameters_count>=2) && state.is_userdata(1) && state.is_string(2)){
+			void * lua_thread_state = state.new_thread();
+			lutok::state lua_thread = lutok::state(lua_thread_state);
+			lua_thread.load_string(state.to_string(2));
+			lua_thread.push_userdata(getZMQobject(1));
+			lua_thread.pcall(1,0,0);
+			return 1;
+		}
+		return 0;
+	}
+
 	int lua_zmqGet(lutok::state & state){
 		if (state.is_userdata(1) && state.is_number(2)){
 			int result = zmq_ctx_get(getZMQobject(1), state.to_integer(2));
@@ -809,6 +822,8 @@ extern "C" LUA_API int luaopen_luazmq(lua_State * L){
 	module["sleep"] = LuaZMQ::lua_zmqSleep;
 	module["stopwatchStart"] = LuaZMQ::lua_zmqStopwatchStart;
 	module["stopwatchStop"] = LuaZMQ::lua_zmqStopwatchStop;
+
+	module["thread"] = LuaZMQ::lua_zmqThread;
 
 	state.new_table();
 	lutok::registerLib(state, module);

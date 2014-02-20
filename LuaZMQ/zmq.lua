@@ -385,6 +385,9 @@ M.context = function(io_threads)
 		shutdown = function()
 			zmq.shutdown(context)
 		end,
+		thread = function(code)
+			return zmq.thread(context, code)
+		end,
 		options = options,
 	}
 	local mt = getmetatable(context)

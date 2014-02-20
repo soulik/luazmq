@@ -3,7 +3,9 @@ LuaZMQ
 
 ZeroMQ binding for Lua
 
-This binding is divided into low level C++ part and high level Lua part.
+This binding relies on ZeroMQ 4.0.x+ C API!
+
+It's divided into low level C++ part and high level Lua part.
 Therefore there are two files luazmq.dll (luazmq.so) and zmq.lua.
 
 Dependencies
@@ -15,6 +17,61 @@ To build and use LuaZMQ successfully you need:
 * Lua 5.1.x, LuaJIT 2.0.x
 * Lutok - https://github.com/soulik/lutok
 * update lua5.1.props so that you've got correct paths for Lua header and library files
+
+Usage
+=====
+
+# Req part without polling
+
+```lua
+local zmq = require 'zmq'
+
+local context = assert(zmq.context())
+local socket = assert(context.socket(zmq.ZMQ_REQ))
+
+socket.options.identity = "A client #1"
+
+assert(socket.connect("tcp://localhost:12345"))
+
+assert(socket.send("Test message"))
+local result = assert(socket.recvAll())
+print('Returned answer: ', result)
+
+socket.diconnect()
+
+```
+
+# Rep part with polling
+
+```lua
+local zmq = require 'zmq'
+
+local context = assert(zmq.context())
+local socket = assert(context.socket(zmq.ZMQ_REP))
+
+socket.options.identity = "A client #1"
+
+assert(socket.connect("tcp://localhost:12345"))
+assert(socket.bind("tcp://*:12345"))
+
+local poll = zmq.poll()
+	
+poll.add(socket, zmq.ZMQ_POLLIN, function(socket)
+	local result = assert(socket.recvAll())
+	local identity = socket.options.identity
+	local data = "Hello: "..identity..". This is a reply to: "..result
+	socket.send(data)
+	print('Received: ', result, 'from: ', identity)
+end)
+
+while true do
+	poll.start()
+end
+
+socket.diconnect()
+```
+
+
 
 Authors
 =======
@@ -28,7 +85,7 @@ For general project information, please visit:
 
 Copying
 =======
-Copyright 2012, 2013 Mário Kašuba
+Copyright 2013, 2014 Mário Kašuba
 All rights reserved.
 
 Redistribution and use in source and binary forms, with or without
@@ -40,9 +97,6 @@ met:
 * Redistributions in binary form must reproduce the above copyright
   notice, this list of conditions and the following disclaimer in the
   documentation and/or other materials provided with the distribution.
-* Neither the name of Google Inc. nor the names of its contributors
-  may be used to endorse or promote products derived from this software
-  without specific prior written permission.
 
 THIS SOFTWARE IS PROVIDED BY THE COPYRIGHT HOLDERS AND CONTRIBUTORS
 "AS IS" AND ANY EXPRESS OR IMPLIED WARRANTIES, INCLUDING, BUT NOT
