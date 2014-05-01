@@ -38,6 +38,7 @@
     <Import Project="..\Lua_library.props" />
     <Import Project="..\lua5.1.props" />
     <Import Project="..\zmq.props" />
+    <Import Project="..\lanes.props" />
   </ImportGroup>
   <ImportGroup Label="PropertySheets" Condition="'$(Configuration)|$(Platform)'=='Release|Win32'">
     <Import Project="$(UserRootDir)\Microsoft.Cpp.$(Platform).user.props" Condition="exists('$(UserRootDir)\Microsoft.Cpp.$(Platform).user.props')" Label="LocalAppDataPlatform" />
@@ -45,6 +46,7 @@
     <Import Project="..\Lua_library.props" />
     <Import Project="..\lua5.1.props" />
     <Import Project="..\zmq.props" />
+    <Import Project="..\lanes.props" />
   </ImportGroup>
   <PropertyGroup Label="UserMacros" />
   <PropertyGroup Condition="'$(Configuration)|$(Platform)'=='Debug|Win32'">

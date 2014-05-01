@@ -1,6 +1,14 @@
 ﻿local zmq = require 'luazmq'
 local M = {}
 
+local linda
+local lanes = require "lanes"
+
+if lanes then
+	lanes.configure()
+	linda = lanes.linda()
+end
+
 local constants = {
 	ZMQ_PAIR = 					0,
     ZMQ_PUB =					1,
@@ -385,8 +393,19 @@ M.context = function(io_threads)
 		shutdown = function()
 			zmq.shutdown(context)
 		end,
-		thread = function(code)
-			return zmq.thread(context, code)
+		thread = function(fn)
+			if lanes and linda then
+				local lane_conf = {
+					required = {'bit','ffi'},
+				}
+				print(context, type(context))
+				local t = lanes.gen("*",lane_conf,fn)
+				t(context)
+				return t
+			end
+		end,
+		coroutine = function(code)
+			return zmq.coroutine(context, code)
 		end,
 		options = options,
 	}

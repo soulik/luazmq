@@ -15,7 +15,25 @@ namespace LuaZMQ {
 
 #define getZMQobject(n) *state.to_userdata<void*>((n))
 
+	void lua_zmqIDfun(void * lua_state, lutok::lanes_eDeepOp op){
+		lutok::state & state = lutok::state(lua_state);
+		if (op == lutok::lanes_eDeepOp::eDO_new){
+			void * context = zmq_ctx_new();
+			if (context){
+				state.push_lightuserdata(context);
+			}else{
+				state.push_nil();
+			}
+		}else if (op == lutok::lanes_eDeepOp::eDO_delete){
+			void * context = const_cast<void *>(state.to_lightuserdata(-1));
+			zmq_ctx_term(context);
+		}else if (op == lutok::lanes_eDeepOp::eDO_metatable){
+			state.new_table();
+		}
+	}
+
 	int lua_zmqInit(lutok::state & state){
+		/*
 		void * context = zmq_ctx_new();
 		if (!context){
 			state.push_boolean(false);
@@ -27,6 +45,8 @@ namespace LuaZMQ {
 			state.set_metatable();
 			return 1;
 		}
+		*/
+		return state.push_lanes_userdata(reinterpret_cast<lutok::IdFunction>(lua_zmqIDfun));
 	}
 
 	int lua_zmqTerm(lutok::state & state){
@@ -59,6 +79,20 @@ namespace LuaZMQ {
 			lua_thread.load_string(state.to_string(2));
 			lua_thread.push_userdata(getZMQobject(1));
 			lua_thread.pcall(1,0,0);
+			return 1;
+		}
+		return 0;
+	}
+
+	int lua_zmqCoroutine(lutok::state & state){
+		int parameters_count = state.get_top();
+		if ((parameters_count>=2) && state.is_userdata(1) && state.is_function(2)){
+			void * lua_thread_state = state.new_thread();
+			lutok::state lua_thread = lutok::state(lua_thread_state);
+			state.push_value(2);
+			state.xmove(lua_thread, 1);
+			lua_thread.push_userdata(getZMQobject(1));
+			lua_thread.resume(1);
 			return 1;
 		}
 		return 0;
@@ -824,6 +858,7 @@ extern "C" LUA_API int luaopen_luazmq(lua_State * L){
 	module["stopwatchStop"] = LuaZMQ::lua_zmqStopwatchStop;
 
 	module["thread"] = LuaZMQ::lua_zmqThread;
+	module["coroutine"] = LuaZMQ::lua_zmqCoroutine;
 
 	state.new_table();
 	lutok::registerLib(state, module);
