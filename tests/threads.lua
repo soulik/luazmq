@@ -1,9 +1,8 @@
 ﻿local zmq = require 'zmq'
 
 local req = [[
-	local arg = {...}
 	local zmq = require 'zmq'
-	local context, msg = assert(zmq.context(assert(arg[1])))
+	local context, msg = assert(zmq.context(assert(select(1, ...))))
 	local name = "Thread 1"
 
 	local socket,msg = assert(context.socket(zmq.ZMQ_REQ))
