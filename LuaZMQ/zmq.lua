@@ -192,11 +192,13 @@ local socket_options = {
 
 local setupSocket
 
-M.context = function(io_threads)
-	local context, msg = zmq.init(io_threads)
+M.context = function(context, io_threads)
+	local context, msg = context or zmq.init(io_threads)
+	
 	if not context then
 		return false, msg
 	end
+
 	local options = {}
 	setmetatable(options, {
 		__index = function(t, name)
@@ -206,6 +208,7 @@ M.context = function(io_threads)
 			zmq.set(context, name, value)
 		end,
 	})
+
 	local lfn = {
 		socket = function(_type)
 			local socket, msg = zmq.socket(context, _type)
@@ -285,7 +288,9 @@ M.context = function(io_threads)
 						return zmq.send(socket, str, flags)
 					end,
 					sendID = function(id)
-						zmq.send(socket, id, constants.ZMQ_SNDMORE)
+						if id then
+							zmq.send(socket, id, constants.ZMQ_SNDMORE)
+						end
 						zmq.send(socket, '', constants.ZMQ_SNDMORE)
 					end,
 					close = function()
@@ -366,7 +371,7 @@ M.context = function(io_threads)
 				local mt = getmetatable(socket)
 				mt.__index = function(t, fn)
 					if fn == "more" then
-						local more = zmq.socketGetOptionI(socket, constants.ZMQ_MORE)
+						local more = zmq.socketGetOptionI(socket, constants.ZMQ_RCVMORE)
 						return (more == 1)
 					else
 						return lfn[fn]
@@ -386,7 +391,21 @@ M.context = function(io_threads)
 			zmq.shutdown(context)
 		end,
 		thread = function(code)
-			return zmq.thread(context, code)
+			local thread = zmq.thread(context, code)
+			local mt = getmetatable(thread)
+			local lfn = {
+				join = function(thread)
+					zmq.joinThread(context)
+				end,
+			}
+			mt.__index = function(t, fn)
+				return lfn[fn]
+			end
+			mt.__gc = function()
+				zmq.freeThread(context)
+			end
+
+			return thread
 		end,
 		options = options,
 	}
@@ -457,7 +476,7 @@ M.poll = function()
 	local lfn = {
 		items = items,
 		start = function(timeout)
-			if zmq.poll(poll, timeout) > 0 then
+			if assert(zmq.poll(poll, timeout)) > 0 then
 				local size = zmq.pollSize(poll)
 				for i=0,size-1 do
 					local v = zmq.pollGet(poll, i) 

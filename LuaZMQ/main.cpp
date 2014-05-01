@@ -1,4 +1,5 @@
 #include "common.h"
+#include <thread>
 
 namespace LuaZMQ {
 	typedef std::map< std::string, lutok::cxx_function > moduleDef;
@@ -54,12 +55,47 @@ namespace LuaZMQ {
 	int lua_zmqThread(lutok::state & state){
 		int parameters_count = state.get_top();
 		if ((parameters_count>=2) && state.is_userdata(1) && state.is_string(2)){
-			void * lua_thread_state = state.new_thread();
-			lutok::state lua_thread = lutok::state(lua_thread_state);
-			lua_thread.load_string(state.to_string(2));
-			lua_thread.push_userdata(getZMQobject(1));
-			lua_thread.pcall(1,0,0);
+			//shared variables
+			std::string code = state.to_string(2);
+			void * zmqObj = getZMQobject(1);
+
+			std::thread * lua_thread = new std::thread([](std::string & code, void * zmqObj){
+				lutok::state & thread_state = lutok::state();
+				thread_state.new_state();
+				thread_state.openLibs();
+				try{
+					thread_state.load_string(code);
+
+					thread_state.push_userdata(zmqObj);
+					thread_state.new_table();
+					thread_state.set_metatable();
+
+					thread_state.pcall(1,0,0);
+				}catch(std::exception & e){
+					printf("Thread exception: %s\n", e.what());
+				}
+			}, code, zmqObj);
+
+			state.push_userdata(lua_thread);
+			state.new_table();
+			state.set_metatable();
 			return 1;
+		}
+		return 0;
+	}
+
+	int lua_zmqJoinThread(lutok::state & state){
+		if (state.is_userdata(1)){
+			std::thread * lua_thread = static_cast<std::thread *>(*state.to_userdata<void*>(1));
+			lua_thread->join();
+		}
+		return 0;
+	}
+
+	int lua_zmqFreeThread(lutok::state & state){
+		if (state.is_userdata(1)){
+			std::thread * lua_thread = static_cast<std::thread *>(*state.to_userdata<void*>(1));
+			delete lua_thread;
 		}
 		return 0;
 	}
@@ -824,6 +860,8 @@ extern "C" LUA_API int luaopen_luazmq(lua_State * L){
 	module["stopwatchStop"] = LuaZMQ::lua_zmqStopwatchStop;
 
 	module["thread"] = LuaZMQ::lua_zmqThread;
+	module["joinThread"] = LuaZMQ::lua_zmqJoinThread;
+	module["freeThread"] = LuaZMQ::lua_zmqFreeThread;
 
 	state.new_table();
 	lutok::registerLib(state, module);
