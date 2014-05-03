@@ -558,6 +558,14 @@ M.proxy = function(forward, backend, capture)
 	zmq.proxy(forward, backend, capture)
 end
 
+M.Z85_encode = function(str)
+	return zmq.Z85Encode(str)
+end
+
+M.Z85_decode = function(str)
+	return zmq.Z85Decode(str)
+end
+
 M.tohex = function(s)
 	local t = {}
 	for i=1,#s do

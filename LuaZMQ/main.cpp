@@ -846,10 +846,10 @@ namespace LuaZMQ {
 		if (state.is_string(1)){
 			std::string data = state.to_lstring(1);
 			size_t length = data.length();
-			size_t newLength = static_cast<unsigned int>(ceil(length*1.25+1));
+			size_t newLength = static_cast<unsigned int>(ceil(length*1.25)+1);
 			char * buffer = new char[newLength];
 			if (zmq_z85_encode(buffer, reinterpret_cast<unsigned char*>(const_cast<char*>(data.c_str())), length) != NULL){
-				state.push_lstring(buffer, newLength);
+				state.push_string(buffer);
 			}else{
 				state.push_boolean(false);
 			}
@@ -860,16 +860,20 @@ namespace LuaZMQ {
 	}
 	int lua_zmqZ85Decode(lutok::state & state){
 		if (state.is_string(1)){
-			std::string data = state.to_lstring(1);
+			std::string data = state.to_string(1);
 			size_t length = data.length();
-			size_t newLength = static_cast<unsigned int>(ceil(length*0.8+1));
-			char * buffer = new char[newLength];
-			if (zmq_z85_decode(reinterpret_cast<unsigned char*>(const_cast<char*>(data.c_str())), buffer) != NULL){
-				state.push_lstring(buffer, newLength);
+			if (length%5 == 0){
+				size_t newLength = static_cast<unsigned int>(ceil(length*0.8));
+				char * buffer = new char[newLength];
+				if (zmq_z85_decode(reinterpret_cast<unsigned char*>(buffer), const_cast<char*>(data.c_str())) != NULL){
+					state.push_lstring(buffer, newLength);
+				}else{
+					state.push_boolean(false);
+				}
+				delete buffer;
 			}else{
 				state.push_boolean(false);
 			}
-			delete buffer;
 			return 1;
 		}
 		return 0;
