@@ -6,11 +6,14 @@ EndProject
 Global
 	GlobalSection(SolutionConfigurationPlatforms) = preSolution
 		Debug|Win32 = Debug|Win32
+		Release - wo msvcrt DLL|Win32 = Release - wo msvcrt DLL|Win32
 		Release|Win32 = Release|Win32
 	EndGlobalSection
 	GlobalSection(ProjectConfigurationPlatforms) = postSolution
 		{FDFE0633-3B4B-4AE7-9ACD-0FB15E6594A9}.Debug|Win32.ActiveCfg = Debug|Win32
 		{FDFE0633-3B4B-4AE7-9ACD-0FB15E6594A9}.Debug|Win32.Build.0 = Debug|Win32
+		{FDFE0633-3B4B-4AE7-9ACD-0FB15E6594A9}.Release - wo msvcrt DLL|Win32.ActiveCfg = Release - wo msvcrt DLL|Win32
+		{FDFE0633-3B4B-4AE7-9ACD-0FB15E6594A9}.Release - wo msvcrt DLL|Win32.Build.0 = Release - wo msvcrt DLL|Win32
 		{FDFE0633-3B4B-4AE7-9ACD-0FB15E6594A9}.Release|Win32.ActiveCfg = Release|Win32
 		{FDFE0633-3B4B-4AE7-9ACD-0FB15E6594A9}.Release|Win32.Build.0 = Release|Win32
 	EndGlobalSection

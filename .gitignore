@@ -5,5 +5,8 @@
 *.user
 Debug/*
 Release/*
+Release - wo msvcrt DLL/*
 LuaZMQ/Debug/*
-luaZMQ/Release/*
+LuaZMQ/Release/*
+LuaZMQ/Release - wo msvcrt DLL/*
+bin/*
