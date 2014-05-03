@@ -193,7 +193,13 @@ local socket_options = {
 local setupSocket
 
 M.context = function(context, io_threads)
-	local context, msg = context or zmq.init(io_threads)
+	local contextOwner
+	if context then
+		contextOwner = false
+	else
+		contextOwner = true
+	end
+	local context, msg = context or assert(zmq.init(io_threads))
 	
 	if not context then
 		return false, msg
@@ -286,6 +292,22 @@ M.context = function(context, io_threads)
 					send = function(str, flags)
 						local str = str or ''
 						return zmq.send(socket, str, flags)
+					end,
+					recvMultipart = function(bufferLength)
+						local bufferLength = bufferLength or 4096
+						local results = {}
+
+						repeat
+							table.insert(results, assert(zmq.recv(socket, bufferLength)))
+						until not socket.more
+						return results
+					end,
+					sendMultipart = function(t, flags)
+						local count = #t
+						for i=1,count-1 do
+							zmq.send(socket, t[i], constants.ZMQ_SNDMORE)
+						end
+						return zmq.send(socket, t[count], flags)
 					end,
 					sendID = function(id)
 						if id then
@@ -394,18 +416,34 @@ M.context = function(context, io_threads)
 			local thread = zmq.thread(context, code)
 			local mt = getmetatable(thread)
 			local lfn = {
-				join = function(thread)
-					zmq.joinThread(context)
+				join = function()
+					zmq.joinThread(thread)
 				end,
+				result = function()
+					return zmq.getThreadResult(thread)
+				end
 			}
 			mt.__index = function(t, fn)
 				return lfn[fn]
 			end
 			mt.__gc = function()
-				zmq.freeThread(context)
+				zmq.freeThread(thread)
 			end
 
 			return thread
+		end,
+		pipe = function(id, pairType)
+			local pair = assert(context.socket(constants.ZMQ_PAIR))
+			pair.options.LINGER = 0
+			pair.options.SNDHWM = 1
+			pair.options.RCVHWM = 1
+
+			if pairType=="bind" then
+				pair.bind("inproc://"..id)
+			elseif pairType=="connext" then
+				pair.connect("inproc://"..id)
+			end
+			return pair
 		end,
 		options = options,
 	}
@@ -414,7 +452,9 @@ M.context = function(context, io_threads)
 		return lfn[fn]
 	end
 	mt.__gc = function()
-		zmq.term(context)
+		if contextOwner then
+			zmq.term(context)
+		end
 	end
 	return context
 end

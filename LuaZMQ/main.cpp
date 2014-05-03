@@ -12,6 +12,11 @@ namespace LuaZMQ {
 		state.push_string(zmq_strerror(zmq_errno()));
 	}
 
+	struct threadData {
+		std::thread thread;
+		std::string result;
+	};
+
 #define INPUT_BUFFER_SIZE	4096
 
 #define getZMQobject(n) *state.to_userdata<void*>((n))
@@ -59,7 +64,9 @@ namespace LuaZMQ {
 			std::string code = state.to_string(2);
 			void * zmqObj = getZMQobject(1);
 
-			std::thread * lua_thread = new std::thread([](std::string & code, void * zmqObj){
+			threadData * luaThread = new threadData;
+
+			luaThread->thread = std::thread([&](std::string & code, void * zmqObj, std::string & result){
 				lutok::state & thread_state = lutok::state();
 				thread_state.new_state();
 				thread_state.openLibs();
@@ -72,30 +79,47 @@ namespace LuaZMQ {
 
 					thread_state.pcall(1,0,0);
 				}catch(std::exception & e){
-					printf("Thread exception: %s\n", e.what());
+					result = e.what();
 				}
-			}, code, zmqObj);
+			}, code, zmqObj, std::ref(luaThread->result));
 
-			state.push_userdata(lua_thread);
+			state.push_userdata(luaThread);
 			state.new_table();
 			state.set_metatable();
 			return 1;
+		}else{
+			state.push_boolean(false);
+			state.push_string("Two parameters are expected: ZMQ context and thread code!");
+			return 2;
 		}
 		return 0;
 	}
 
+	int lua_zmqGetThreadResult(lutok::state & state){
+		if (state.is_userdata(1)){
+			threadData * luaThread = static_cast<threadData *>(*state.to_userdata<void*>(1));
+			state.push_string(luaThread->result);
+			return 1;
+		}
+		return 1;
+	}
+
 	int lua_zmqJoinThread(lutok::state & state){
 		if (state.is_userdata(1)){
-			std::thread * lua_thread = static_cast<std::thread *>(*state.to_userdata<void*>(1));
-			lua_thread->join();
+			threadData * luaThread = static_cast<threadData *>(*state.to_userdata<void*>(1));
+			if (luaThread->thread.joinable()){
+				luaThread->thread.join();
+			}else{
+				luaThread->thread.detach();
+			}
 		}
 		return 0;
 	}
 
 	int lua_zmqFreeThread(lutok::state & state){
 		if (state.is_userdata(1)){
-			std::thread * lua_thread = static_cast<std::thread *>(*state.to_userdata<void*>(1));
-			delete lua_thread;
+			threadData * luaThread = static_cast<threadData *>(*state.to_userdata<void*>(1));
+			delete luaThread;
 		}
 		return 0;
 	}
@@ -292,13 +316,13 @@ namespace LuaZMQ {
 
 						state.get_field(3, "events");
 						if (state.is_number(-1)){
-							item.events = state.to_integer(-1);
+							item.events = static_cast<short>(state.to_integer(-1));
 						}
 						state.pop(1);
 
 						state.get_field(3, "revents");
 						if (state.is_number(-1)){
-							item.revents = state.to_integer(-1);
+							item.revents = static_cast<short>(state.to_integer(-1));
 						}
 						state.pop(1);
 
@@ -322,13 +346,13 @@ namespace LuaZMQ {
 
 					state.get_field(2, "events");
 					if (state.is_number(-1)){
-						item.events = state.to_integer(-1);
+						item.events = static_cast<short>(state.to_integer(-1));
 					}
 					state.pop(1);
 
 					state.get_field(2, "revents");
 					if (state.is_number(-1)){
-						item.revents = state.to_integer(-1);
+						item.revents = static_cast<short>(state.to_integer(-1));
 					}
 					state.pop(1);
 
@@ -445,7 +469,21 @@ namespace LuaZMQ {
 		}
 		return 0;
 	}
-
+#if (ZMQ_VERSION_MAJOR>=4) && (ZMQ_VERSION_MINOR>=0) && (ZMQ_VERSION_PATCH>=5)
+	int lua_zmqProxySteerable(lutok::state & state){
+		if (state.is_userdata(1) && state.is_userdata(2)){
+			void * frontend = getZMQobject(1);
+			void * backend = getZMQobject(2);
+			void * capture = nullptr;
+			if (state.is_userdata(3)){
+				capture = getZMQobject(3);
+			}
+			void * control = getZMQobject(4);
+			zmq_proxy_steerable(frontend, backend, capture, control);
+		}
+		return 0;
+	}
+#endif
 	int lua_zmqVersion(lutok::state & state){
 		int major = 0, minor= 0, patch = 0;
 		zmq_version(&major, &minor, &patch);
@@ -804,6 +842,38 @@ namespace LuaZMQ {
 		}
 		return 0;
 	}
+	int lua_zmqZ85Encode(lutok::state & state){
+		if (state.is_string(1)){
+			std::string data = state.to_lstring(1);
+			size_t length = data.length();
+			size_t newLength = static_cast<unsigned int>(ceil(length*1.25+1));
+			char * buffer = new char[newLength];
+			if (zmq_z85_encode(buffer, reinterpret_cast<unsigned char*>(const_cast<char*>(data.c_str())), length) != NULL){
+				state.push_lstring(buffer, newLength);
+			}else{
+				state.push_boolean(false);
+			}
+			delete buffer;
+			return 1;
+		}
+		return 0;
+	}
+	int lua_zmqZ85Decode(lutok::state & state){
+		if (state.is_string(1)){
+			std::string data = state.to_lstring(1);
+			size_t length = data.length();
+			size_t newLength = static_cast<unsigned int>(ceil(length*0.8+1));
+			char * buffer = new char[newLength];
+			if (zmq_z85_decode(reinterpret_cast<unsigned char*>(const_cast<char*>(data.c_str())), buffer) != NULL){
+				state.push_lstring(buffer, newLength);
+			}else{
+				state.push_boolean(false);
+			}
+			delete buffer;
+			return 1;
+		}
+		return 0;
+	}
 
 };
 
@@ -854,6 +924,9 @@ extern "C" LUA_API int luaopen_luazmq(lua_State * L){
 	module["poll"] = LuaZMQ::lua_zmqPoll;
 
 	module["proxy"] = LuaZMQ::lua_zmqProxy;
+#if (ZMQ_VERSION_MAJOR>=4) && (ZMQ_VERSION_MINOR>=0) && (ZMQ_VERSION_PATCH>=5)
+	module["proxySteerable"] = LuaZMQ::lua_zmqProxySteerable;
+#endif
 
 	module["sleep"] = LuaZMQ::lua_zmqSleep;
 	module["stopwatchStart"] = LuaZMQ::lua_zmqStopwatchStart;
@@ -862,6 +935,10 @@ extern "C" LUA_API int luaopen_luazmq(lua_State * L){
 	module["thread"] = LuaZMQ::lua_zmqThread;
 	module["joinThread"] = LuaZMQ::lua_zmqJoinThread;
 	module["freeThread"] = LuaZMQ::lua_zmqFreeThread;
+	module["getThreadResult"] = LuaZMQ::lua_zmqGetThreadResult;
+
+	module["Z85Encode"] = LuaZMQ::lua_zmqZ85Encode;
+	module["Z85Decode"] = LuaZMQ::lua_zmqZ85Decode;
 
 	state.new_table();
 	lutok::registerLib(state, module);
