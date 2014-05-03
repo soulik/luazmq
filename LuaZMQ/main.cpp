@@ -557,14 +557,25 @@ namespace LuaZMQ {
 
 	int lua_zmqSend(lutok::state & state){
 		if (state.is_userdata(1) && state.is_string(2)){
-			size_t len = state.obj_len(2);
-			if (len>=0){
-				int flags = 0;
-				if (state.is_number(3)){
-					flags = state.to_integer(3);
-				}
-				std::string & buffer = state.to_string(2);
+			std::string & buffer = state.to_lstring(2);
+			size_t len = buffer.length();
+			int flags = 0;
+			if (state.is_number(3)){
+				flags = state.to_integer(3);
+			}
+
+			if (len>0){
 				int result = zmq_send(getZMQobject(1), buffer.c_str(), len, flags);
+				if (result < 0){
+					state.push_boolean(false);
+					lua_pushZMQ_error(state);
+					return 2;
+				}else{
+					state.push_integer(result);
+					return 1;
+				}
+			}else{
+				int result = zmq_send(getZMQobject(1), nullptr, 0, flags);
 				if (result < 0){
 					state.push_boolean(false);
 					lua_pushZMQ_error(state);
@@ -687,8 +698,9 @@ namespace LuaZMQ {
 					lua_pushZMQ_error(state);
 				}else{
 					size_t dest_size = zmq_msg_size(msg);
-					size_t src_size = state.obj_len(2);
-					std::string & src = state.to_string(2);
+					std::string & src = state.to_lstring(2);
+					size_t src_size = src.length();
+
 					if (src_size <= dest_size){
 						memcpy(result, src.c_str(), src_size);
 					}else{

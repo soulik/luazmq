@@ -470,7 +470,7 @@ end
 M.stopwatch = function()
 	local stopwatch = zmq.stopwatchStart()
 	local closed = false
-	local lfs = {
+	local lfn = {
 		stop = function()
 			if not closed then
 				closed = true
@@ -483,8 +483,9 @@ M.stopwatch = function()
 		return lfn[fn]
 	end
 	mt.__gc = function()
-		lfs.stop()
+		lfn.stop()
 	end
+	return stopwatch
 end
 
 M.poll = function()
