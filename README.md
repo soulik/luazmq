@@ -68,7 +68,118 @@ end
 socket.diconnect()
 ```
 
+## Req & Rep pair with threads
+```lua
+local req = [[
+	local name = "Thread 1"
 
+	local socket,msg = assert(context.socket(zmq.ZMQ_REQ))
+	socket.options.identity = name
+
+	local result, msg = assert(socket.connect("tcp://127.0.0.1:12345"))
+
+	local poll = zmq.poll()
+
+	poll.add(socket, zmq.ZMQ_POLLIN, function(socket)
+		local result = assert(socket.recvAll())
+		if result then
+			print(string.format("1 Recieved data: %q", result))
+		end
+	end)
+
+	socket.send(":)")
+
+	while true do
+		poll.start()
+	end
+	socket.close()
+]]
+
+local zmq = require 'zmq'
+
+local context, msg = assert(zmq.context())
+local socket,msg = assert(context.socket(zmq.ZMQ_ROUTER))
+local result, msg = assert(socket.bind("tcp://*:12345"))
+
+local poll = zmq.poll()
+
+poll.add(socket, zmq.ZMQ_POLLIN, function(socket)
+	local name, _, result = unpack(assert(socket.recvMultipart()))
+	print(string.format("0 Recieved data: %q from: %q", result, name))
+
+	local data = "Hello: "..tostring(result)
+	socket.sendMultipart({name, '', data})
+end)
+
+print("0 Waiting for connections")
+local t1 = context.thread(req)
+while true do
+	poll.start()
+end
+t1.join()
+socket.close()
+```
+
+## Inproc communication for threads
+```lua
+local req = [[
+	local name = unpack(arg)
+
+	local socket,msg = assert(context.socket(zmq.ZMQ_REQ))
+	local result, msg = assert(socket.connect("inproc://test1"))
+	local poll = zmq.poll()
+	local running = true
+
+	poll.add(socket, zmq.ZMQ_POLLIN, function(socket)
+		local result = socket.recvAll()
+		if result then
+			print(name, string.format("Recieved data: %q", result))
+			running = false
+		end
+	end)
+
+	socket.send("Lorem ipsum dolor sit amet")
+
+	while running do
+		poll.start()
+	end
+	socket.close()
+]]
+
+local zmq = require 'zmq'
+local THREADS = 10
+
+local context, msg = assert(zmq.context())
+local socket,msg = assert(context.socket(zmq.ZMQ_REP))
+local result, msg = assert(socket.bind("inproc://test1"))
+
+local poll = zmq.poll()
+
+poll.add(socket, zmq.ZMQ_POLLIN, function(socket)
+	local result = socket.recvAll()
+	if result then
+		print(string.format("0 Recieved data: %q", result))
+		local data = "Hello: "..result
+		socket.send(data)
+	end
+end)
+
+print("0 Waiting for connections")
+local threads = {}
+for i=1,THREADS do
+	threads[i] = context.thread(req, string.format("%d", i))
+end
+
+while true do
+	poll.start()
+end
+
+for _, thread in ipairs(threads) do
+	thread.join()
+end
+
+socket.close()
+```
 
 Authors
 =======

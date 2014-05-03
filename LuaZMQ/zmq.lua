@@ -412,7 +412,31 @@ M.context = function(context, io_threads)
 		shutdown = function()
 			zmq.shutdown(context)
 		end,
-		thread = function(code)
+		thread = function(code, ...)
+			local arg = {...}
+			local finalCode = {[[
+local zmq = require 'zmq'
+local context = assert(zmq.context(assert(select(1, ...))))
+local arg = {]]}
+			
+			for _, value in ipairs(arg) do
+				if type(value)=="bool" then
+					table.insert(finalCode, tostring(value))
+				elseif type(value)=="number" then
+					table.insert(finalCode, tostring(value))
+				elseif type(value)=="string" then
+					table.insert(finalCode, string.format("%q", value))
+				elseif type(value)=="function" then
+					table.insert(finalCode, string.format("loadstring(%q)", string.dump(value)))
+				else
+					error("Thread parameters can be booleans, numbers, string and functions w/o upvalues")
+				end
+				table.insert(finalCode, ',')
+			end
+			table.insert(finalCode, "}\n")
+			table.insert(finalCode, code)
+			local code = table.concat(finalCode)
+
 			local thread = zmq.thread(context, code)
 			local mt = getmetatable(thread)
 			local lfn = {

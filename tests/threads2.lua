@@ -1,14 +1,8 @@
-﻿local zmq = require 'zmq'
-
-local req = [[
-	local zmq = require 'zmq'
-	local context, msg = assert(zmq.context(assert(select(1, ...))))
+﻿local req = [[
+	local name = unpack(arg)
 
 	local socket,msg = assert(context.socket(zmq.ZMQ_REQ))
-
 	local result, msg = assert(socket.connect("inproc://test1"))
-	--print(name, "connected")
-
 	local poll = zmq.poll()
 
 	poll.add(socket, zmq.ZMQ_POLLIN, function(socket)
@@ -26,7 +20,7 @@ local req = [[
 	socket.close()
 ]]
 
---local zmq = require 'zmq'
+local zmq = require 'zmq'
 
 local context, msg = assert(zmq.context())
 local socket,msg = assert(context.socket(zmq.ZMQ_REP))
@@ -47,10 +41,7 @@ end)
 print("0 Waiting for connections")
 local threads = {}
 for i=1,10 do
-	local code = string.format([[
-local name = %d 	
-	]], i)..req
-	threads[i] = context.thread(code)
+	threads[i] = context.thread(req, string.format("%d", i))
 end
 
 while true do
