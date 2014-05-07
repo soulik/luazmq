@@ -60,6 +60,10 @@ namespace LuaZMQ {
 	int lua_zmqThread(lutok::state & state){
 		int parameters_count = state.get_top();
 		if ((parameters_count>=2) && state.is_userdata(1) && state.is_string(2)){
+			bool debug = false;
+			if (state.is_boolean(3)){
+				debug = state.to_boolean(3);
+			}
 			//shared variables
 			std::string code = state.to_string(2);
 			void * zmqObj = getZMQobject(1);
@@ -80,6 +84,9 @@ namespace LuaZMQ {
 					thread_state.pcall(1,0,0);
 				}catch(std::exception & e){
 					result = e.what();
+					if (debug){
+						printf("Thread error: %s\n",e.what());
+					}
 				}
 			}, code, zmqObj, std::ref(luaThread->result));
 

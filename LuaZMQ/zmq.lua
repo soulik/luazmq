@@ -192,7 +192,7 @@ local socket_options = {
 
 local setupSocket
 
-M.context = function(context, io_threads)
+M.context = function(context, io_threads, DEBUG)
 	local contextOwner
 	if context then
 		contextOwner = false
@@ -437,7 +437,7 @@ local arg = {]]}
 			table.insert(finalCode, code)
 			local code = table.concat(finalCode)
 
-			local thread = zmq.thread(context, code)
+			local thread = zmq.thread(context, code, DEBUG)
 			local mt = getmetatable(thread)
 			local lfn = {
 				join = function()
@@ -597,6 +597,15 @@ M.tohex = function(s)
 		table.insert(t, string.format("%02X", string.byte(s, i)))
 	end
 	return table.concat(t)
+end
+
+M.ID = function(n)
+	local math.randomseed(os.date())
+	local t = {}
+	for i=1,n do
+		t[i] = math.random(256)-1
+	end
+	return M.Z85_encode(string.char(unpack(t)))
 end
 
 setmetatable(M, {
