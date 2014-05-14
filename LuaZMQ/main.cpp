@@ -17,7 +17,7 @@ namespace LuaZMQ {
 		std::string result;
 	};
 
-#define INPUT_BUFFER_SIZE	4096
+#define BUFFER_SIZE	4096
 
 #define getZMQobject(n) *state.to_userdata<void*>((n))
 
@@ -501,8 +501,11 @@ namespace LuaZMQ {
 	}
 
 	int lua_zmqRecv(lutok::state & state){
-		if (state.is_userdata(1) && state.is_number(2)){
-			size_t len = state.to_integer(2);
+		if (state.is_userdata(1)){
+			size_t len = BUFFER_SIZE;
+			if (state.is_number(2)){
+				len = state.to_integer(2);
+			}
 			if (len>0){
 				int flags = 0;
 				if (state.is_number(3)){
@@ -516,7 +519,8 @@ namespace LuaZMQ {
 					return 2;
 				}else{
 					state.push_lstring(buffer, (result <= len) ? result : len);
-					return 1;
+					state.push_integer(result);
+					return 2;
 				}
 			}
 		}
@@ -529,38 +533,98 @@ namespace LuaZMQ {
 			if (state.is_number(2)){
 				flags = state.to_integer(2);
 			}
+			//input buffer size
+			size_t bufferSize = BUFFER_SIZE;
+			if (state.is_number(3)){
+				bufferSize = state.to_integer(3);
+			}
 
-			char * buffer = static_cast<char*>(_alloca(INPUT_BUFFER_SIZE));
+			char * buffer = static_cast<char*>(_alloca(bufferSize));
 			void * socket = getZMQobject(1);
-			size_t size = sizeof(int);
 			int more=1;
-			size_t steps = 0;
-			//zmq_getsockopt(socket, ZMQ_RCVMORE, &more, &size);
+			size_t moreSize = sizeof(more);
 
-			lutok::Buffer lbuffer(state);
+			std::string fullBuffer;
 
-			while (more){
-				int result = zmq_recv(socket, buffer, INPUT_BUFFER_SIZE, flags);
+			while (more==1){
+				int result = zmq_recv(socket, buffer, bufferSize, flags);
 
 				if (result < 0){
 					state.push_boolean(false);
 					lua_pushZMQ_error(state);
 					return 2;
 				}else{
-					lbuffer.addlstring(buffer, result);
+					fullBuffer.append(buffer, result);
 				}
-				if (result >= INPUT_BUFFER_SIZE){
-					zmq_getsockopt(socket, ZMQ_RCVMORE, &more, &size);
-				}else{
-					more = 0;
-				}
+				zmq_getsockopt(socket, ZMQ_RCVMORE, &more, &moreSize);
 			}
 
-			lbuffer.push();
+			state.push_lstring(fullBuffer.c_str(), fullBuffer.size());
 			return 1;
 		}
 		return 0;
 	}
+
+	int lua_zmqRecvMultipart(lutok::state & state){
+		if (state.is_userdata(1)){
+			int l0 = state.get_top();
+			int flags = 0;
+			if (state.is_number(2)){
+				flags = state.to_integer(2);
+			}
+			//input buffer size
+			size_t bufferSize = BUFFER_SIZE;
+			if (state.is_number(3)){
+				bufferSize = state.to_integer(3);
+			}
+
+			char * buffer = static_cast<char*>(_alloca(bufferSize));
+			void * socket = getZMQobject(1);
+			std::string fullBuffer;
+			int more=1;
+			size_t moreSize = sizeof(more);
+
+			state.new_table();
+			size_t partNum = 1;
+			size_t filledPartNum = 0;
+
+			while (more==1){
+				int result = zmq_recv(socket, buffer, bufferSize, flags);
+				int l01 = state.get_top();
+				if (result < 0){
+					state.pop(1); //pop table
+					state.push_boolean(false);
+					lua_pushZMQ_error(state);
+					return 2;
+				}else{
+					//is this part delimiter
+					if ((filledPartNum>0) && (result==0)){
+						state.push_integer(partNum++);
+						state.push_lstring(fullBuffer.c_str(), fullBuffer.length());
+						state.set_table();
+						filledPartNum=0;
+					//it's a message part
+					}else{
+						if (result>0){
+							fullBuffer.append(buffer, result);
+							filledPartNum++;
+						}
+					}
+				}
+				zmq_getsockopt(socket, ZMQ_RCVMORE, &more, &moreSize);
+			}
+			int l1 = state.get_top();
+			if (partNum==1 && filledPartNum>0){
+				state.push_integer(partNum);
+				state.push_lstring(fullBuffer.c_str(), fullBuffer.length());
+				state.set_table();
+			}
+			int l2 = state.get_top();
+
+			return 1;
+		}
+		return 0;
+	} 
 
 	int lua_zmqSend(lutok::state & state){
 		if (state.is_userdata(1) && state.is_string(2)){
@@ -592,6 +656,69 @@ namespace LuaZMQ {
 					return 1;
 				}
 			}
+		}
+		return 0;
+	}
+
+	int lua_zmqSendMultipart(lutok::state & state){
+		if (state.is_userdata(1) && state.is_table(2)){
+			int flags = 0;
+			if (state.is_number(3)){
+				flags = state.to_integer(3);
+			}
+			//input buffer size
+			size_t bufferSize = BUFFER_SIZE;
+			if (state.is_number(4)){
+				bufferSize = state.to_integer(4);
+			}
+
+			size_t parts = state.obj_len(2);
+			size_t partsSent = 0;
+
+			for (size_t partIndex=1; partIndex <= parts; partIndex++){
+				state.push_integer(partIndex);
+				state.get_table(2);
+
+				if (state.is_string()){
+					std::string & buffer = state.to_lstring();
+					size_t len = buffer.length();
+					size_t offset = 0;
+					const char * inputBuffer = buffer.c_str();
+					int finalFlags = (partIndex < parts) ? (flags | ZMQ_SNDMORE) : flags; 
+
+					if (len>0){
+						//send a part
+						do {
+							size_t outputSize = ((len-offset) > bufferSize) ? bufferSize : len-offset;
+
+							int result = zmq_send(getZMQobject(1), inputBuffer+offset, outputSize, finalFlags);
+							if (result < 0){
+								state.pop(1);
+								state.push_boolean(false);
+								lua_pushZMQ_error(state);
+								return 2;
+							}else{
+								offset += result;
+							}
+						}
+						while (offset < len);
+						partsSent++;
+					}
+					if (partIndex < parts){
+						// send a delimiter
+						int result = zmq_send(getZMQobject(1), nullptr, 0, finalFlags);
+						if (result < 0){
+							state.pop(1);
+							state.push_boolean(false);
+							lua_pushZMQ_error(state);
+							return 2;
+						}
+					}
+				}
+				state.pop(1);
+			}
+			state.push_integer(partsSent);
+			return 1;
 		}
 		return 0;
 	}
@@ -921,10 +1048,13 @@ extern "C" LUA_API int luaopen_luazmq(lua_State * L){
 	module["disconnect"] = LuaZMQ::lua_zmqDisconnect;
 	module["shutdown"] = LuaZMQ::lua_zmqShutdown;
 	module["recv"] = LuaZMQ::lua_zmqRecv;
-	module["recvAll"] = LuaZMQ::lua_zmqRecvAll;
 	module["send"] = LuaZMQ::lua_zmqSend;
 	module["get"] = LuaZMQ::lua_zmqGet;
 	module["set"] = LuaZMQ::lua_zmqSet;
+
+	module["recvAll"] = LuaZMQ::lua_zmqRecvAll;
+	module["recvMultipart"] = LuaZMQ::lua_zmqRecvMultipart;
+	module["sendMultipart"] = LuaZMQ::lua_zmqSendMultipart;
 
 	module["msgInit"] = LuaZMQ::lua_zmqMsgInit;
 	module["msgClose"] = LuaZMQ::lua_zmqMsgClose;

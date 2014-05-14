@@ -191,6 +191,11 @@ local socket_options = {
 }
 
 local setupSocket
+local DEFAULT_BUFFER_SIZE = 4096
+
+M.setBufferSize = function(value)
+	DEFAULT_BUFFER_SIZE = value
+end
 
 M.context = function(context, io_threads, DEBUG)
 	local contextOwner
@@ -294,26 +299,14 @@ M.context = function(context, io_threads, DEBUG)
 						return zmq.send(socket, str, flags)
 					end,
 					recvMultipart = function(bufferLength)
-						local bufferLength = bufferLength or 4096
-						local results = {}
-
-						repeat
-							table.insert(results, assert(zmq.recv(socket, bufferLength)))
-						until not socket.more
-						return results
+						return zmq.recvMultipart(socket, flags, bufferLengthor or DEFAULT_BUFFER_SIZE)
 					end,
-					sendMultipart = function(t, flags)
-						local count = #t
-						for i=1,count-1 do
-							zmq.send(socket, t[i], constants.ZMQ_SNDMORE)
-						end
-						return zmq.send(socket, t[count], flags)
+					sendMultipart = function(t, flags, bufferLength)
+						return zmq.sendMultipart(socket, t, flags, bufferLength or DEFAULT_BUFFER_SIZE)
 					end,
 					sendID = function(id)
-						if id then
-							zmq.send(socket, id, constants.ZMQ_SNDMORE)
-						end
-						zmq.send(socket, '', constants.ZMQ_SNDMORE)
+						assert(id)
+						zmq.sendMultipart(socket, {id, ''}, constants.ZMQ_SNDMORE)
 					end,
 					close = function()
 						if not closed then
@@ -600,7 +593,8 @@ M.tohex = function(s)
 end
 
 M.ID = function(n)
-	local math.randomseed(os.date())
+	local n = n or 8
+	math.randomseed(os.time())
 	local t = {}
 	for i=1,n do
 		t[i] = math.random(256)-1
