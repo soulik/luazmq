@@ -18,6 +18,7 @@ namespace LuaZMQ {
 	};
 
 #define BUFFER_SIZE	4096
+#define MAX_BUFFER_SIZE 1024*1024*16	//Maximum buffer size for recvMultipart
 
 #define getZMQobject(n) *state.to_userdata<void*>((n))
 
@@ -587,8 +588,9 @@ namespace LuaZMQ {
 			state.new_table();
 			size_t partNum = 1;
 			size_t filledPartNum = 0;
+			size_t bytesRead = 0;
 
-			while (more==1){
+			while (more == 1){
 				int result = zmq_recv(socket, buffer, bufferSize, flags);
 				int l01 = state.get_top();
 				if (result < 0){
@@ -598,16 +600,30 @@ namespace LuaZMQ {
 					return 2;
 				}else{
 					//is this part delimiter
-					if ((filledPartNum>0) && (result==0)){
+					if ((filledPartNum > 0) && (result == 0)){
+						//flush buffer
 						state.push_integer(partNum++);
 						state.push_lstring(fullBuffer.c_str(), fullBuffer.length());
 						state.set_table();
-						filledPartNum=0;
+						fullBuffer.clear();
+						filledPartNum = 0;
+						bytesRead = 0;
 					//it's a message part
 					}else{
-						if (result>0){
+						if (result > 0){
 							fullBuffer.append(buffer, result);
+							bytesRead += result;
 							filledPartNum++;
+							//is buffer full?
+							if (bytesRead > MAX_BUFFER_SIZE){
+								//flush buffer
+								state.push_integer(partNum++);
+								state.push_lstring(fullBuffer.c_str(), fullBuffer.length());
+								state.set_table();
+								fullBuffer.clear();
+								filledPartNum = 0;
+								bytesRead = 0;
+							}
 						}
 					}
 				}
