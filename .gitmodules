@@ -1,0 +1,6 @@
+[submodule "dependencies/libzmq"]
+	path = dependencies/libzmq
+	url = https://github.com/zeromq/libzmq.git
+[submodule "dependencies/lutok2"]
+	path = dependencies/lutok2
+	url = https://github.com/soulik/lutok2.git
