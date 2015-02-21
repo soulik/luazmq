@@ -1,5 +1,5 @@
 LuaZMQ
-=====
+======
 
 ZeroMQ binding for Lua
 
@@ -12,11 +12,18 @@ Dependencies
 ============
 To build and use LuaZMQ successfully you need:
 
-* ZeroMQ 4.0.x+
-* A standards-compliant C++ complier. (Visual Studio 2012 is preferred)
-* Lua 5.1.x, LuaJIT 2.0.x
-* Lutok - https://github.com/soulik/lutok
-* update lua5.1.props so that you've got correct paths for Lua header and library files
+* A standards-compliant C++11 complier
+* Lua 5.1.x or LuaJIT 2.0.x+
+* CMake 3.1+
+
+This project contains all required library dependencies except Lua library.
+
+Building
+========
+* cd build
+* cmake ..
+* Correct Lua library and includes path if needed
+* Open project file and compile project using your prefered compiler
 
 Usage
 =====
@@ -193,7 +200,7 @@ For general project information, please visit:
 
 Copying
 =======
-Copyright 2013, 2014 Mário Kašuba
+Copyright 2013, 2014, 2015 Mário Kašuba
 All rights reserved.
 
 Redistribution and use in source and binary forms, with or without

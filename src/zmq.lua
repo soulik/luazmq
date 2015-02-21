@@ -531,6 +531,17 @@ M.poll = function()
 		end,
 	})
 
+	local socketCache = {}
+	setmetatable(socketCache, {
+		__mode = 'v',
+	})
+	local function getRawSocket(s)
+		local smt = getmetatable(s)
+		if smt then
+			return smt.__raw
+		end
+	end
+
 	local lfn = {
 		items = items,
 		start = function(timeout)
@@ -539,8 +550,10 @@ M.poll = function()
 				for i=0,size-1 do
 					local v = zmq.pollGet(poll, i) 
 					if v then
-						local s = v.socket
-						local pollItem = pollItems[s]
+						local rawSocket = getRawSocket(v.socket)
+						local s = socketCache[rawSocket]
+						assert(s, 'Invalid socket')
+						local pollItem = pollItems[rawSocket]
 						if pollItem then
 							if bit.band(v.revents, pollItem[1]) > 0 then
 								local flags = pollItem[1]
@@ -555,7 +568,12 @@ M.poll = function()
 			end
 		end,
 		add = function(s, flags, fn)
-			pollItems[s] = {flags, fn}
+			local rawSocket = getRawSocket(s)
+			pollItems[rawSocket] = {flags, fn}
+			if not socketCache[rawSocket] then
+				socketCache[rawSocket] = s
+			end
+
 			zmq.pollSet(poll,
 				{socket = s, fd = 0, events = flags, revents = 0}
 			)

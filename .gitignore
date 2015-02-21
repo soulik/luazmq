@@ -3,10 +3,4 @@
 *.suo
 *.opensdf
 *.user
-Debug/*
-Release/*
-Release - wo msvcrt DLL/*
-LuaZMQ/Debug/*
-LuaZMQ/Release/*
-LuaZMQ/Release - wo msvcrt DLL/*
-bin/*
+build/*

@@ -2,14 +2,12 @@
 #include <thread>
 
 namespace LuaZMQ {
-	typedef std::map< std::string, lutok::cxx_function > moduleDef;
-
 	struct pollArray_t {
 		std::vector<zmq_pollitem_t> items;
 	};
 
-	inline void lua_pushZMQ_error(lutok::state & state){
-		state.push_string(zmq_strerror(zmq_errno()));
+	inline void lua_pushZMQ_error(lutok2::State & state){
+		state.stack->push<const std::string &>(zmq_strerror(zmq_errno()));
 	}
 
 	struct threadData {
@@ -20,26 +18,29 @@ namespace LuaZMQ {
 #define BUFFER_SIZE	4096
 #define MAX_BUFFER_SIZE 1024*1024*16	//Maximum buffer size for recvMultipart
 
-#define getZMQobject(n) *state.to_userdata<void*>((n))
+#define getZMQobject(n) *(static_cast<void**>(stack->to<void*>((n))))
+#define getThread(n) *(static_cast<threadData **>(stack->to<void*>((n))))
+#define pushUData(v) {void ** s = static_cast<void**>(stack->newUserData(sizeof(void*))); *s = (v); stack->newTable(); stack->setMetatable();}
+#define pushSocket(v) {void ** s = static_cast<void**>(stack->newUserData(sizeof(void*)));	*s = (v); stack->newTable(); stack->setField<void*>("__raw", (v)); stack->setMetatable();}
 
-	int lua_zmqInit(lutok::state & state){
+	int lua_zmqInit(lutok2::State & state){
 		void * context = zmq_ctx_new();
+		Stack * stack = state.stack;
 		if (!context){
-			state.push_boolean(false);
+			stack->push<bool>(false);
 			lua_pushZMQ_error(state);
 			return 2;
 		}else{
-			state.push_userdata(context);
-			state.new_table();
-			state.set_metatable();
+			pushUData(context);
 			return 1;
 		}
 	}
 
-	int lua_zmqTerm(lutok::state & state){
-		if (state.is_userdata(1)){
+	int lua_zmqTerm(lutok2::State & state){
+		Stack * stack = state.stack;
+		if (state.stack->is<LUA_TUSERDATA>(1)){
 			if (zmq_ctx_term(getZMQobject(1)) != 0){
-				state.push_boolean(false);
+				state.stack->push<bool>(false);
 				lua_pushZMQ_error(state);
 				return 2;
 			}
@@ -47,10 +48,11 @@ namespace LuaZMQ {
 		return 0;
 	}
 
-	int lua_zmqShutdown(lutok::state & state){
-		if (state.is_userdata(1)){
+	int lua_zmqShutdown(lutok2::State & state){
+		Stack * stack = state.stack;
+		if (state.stack->is<LUA_TUSERDATA>(1)){
 			if (zmq_ctx_shutdown(getZMQobject(1)) != 0){
-				state.push_boolean(false);
+				state.stack->push<bool>(false);
 				lua_pushZMQ_error(state);
 				return 2;
 			}
@@ -58,31 +60,32 @@ namespace LuaZMQ {
 		return 0;
 	}
 
-	int lua_zmqThread(lutok::state & state){
-		int parameters_count = state.get_top();
-		if ((parameters_count>=2) && state.is_userdata(1) && state.is_string(2)){
+	int lua_zmqThread(lutok2::State & state){
+		Stack * stack = state.stack;
+		int parameters_count = stack->getTop();
+		if ((parameters_count >= 2) && stack->is<LUA_TUSERDATA>(1) && stack->is<LUA_TSTRING>(2)){
 			bool debug = false;
-			if (state.is_boolean(3)){
-				debug = state.to_boolean(3);
+			if (stack->is<LUA_TBOOLEAN>(3)){
+				debug = stack->to<bool>(3);
 			}
 			//shared variables
-			std::string code = state.to_string(2);
+			const std::string code = stack->to<const std::string>(2);
 			void * zmqObj = getZMQobject(1);
 
 			threadData * luaThread = new threadData;
 
 			luaThread->thread = std::thread([&](std::string & code, void * zmqObj, std::string & result){
-				lutok::state & thread_state = lutok::state();
-				thread_state.new_state();
+				lutok2::State & thread_state = lutok2::State();
 				thread_state.openLibs();
 				try{
-					thread_state.load_string(code);
+					thread_state.loadString(code);
 
-					thread_state.push_userdata(zmqObj);
-					thread_state.new_table();
-					thread_state.set_metatable();
+					void ** s = static_cast<void**>(thread_state.stack->newUserData(sizeof(void*)));
+					*s = zmqObj;
+					thread_state.stack->newTable();
+					thread_state.stack->setMetatable();
 
-					thread_state.pcall(1,0,0);
+					thread_state.stack->pcall(1,0,0);
 				}catch(std::exception & e){
 					result = e.what();
 					if (debug){
@@ -90,31 +93,30 @@ namespace LuaZMQ {
 					}
 				}
 			}, code, zmqObj, std::ref(luaThread->result));
-
-			state.push_userdata(luaThread);
-			state.new_table();
-			state.set_metatable();
+			pushUData(luaThread);
 			return 1;
 		}else{
-			state.push_boolean(false);
-			state.push_string("Two parameters are expected: ZMQ context and thread code!");
+			stack->push<bool>(false);
+			stack->push<const std::string &>("Two parameters are expected: ZMQ context and thread code!");
 			return 2;
 		}
 		return 0;
 	}
 
-	int lua_zmqGetThreadResult(lutok::state & state){
-		if (state.is_userdata(1)){
-			threadData * luaThread = static_cast<threadData *>(*state.to_userdata<void*>(1));
-			state.push_string(luaThread->result);
+	int lua_zmqGetThreadResult(lutok2::State & state){
+		Stack * stack = state.stack;
+		if (stack->is<LUA_TUSERDATA>(1)){
+			threadData * luaThread = getThread(1);
+			stack->push<const std::string &>(luaThread->result);
 			return 1;
 		}
 		return 1;
 	}
 
-	int lua_zmqJoinThread(lutok::state & state){
-		if (state.is_userdata(1)){
-			threadData * luaThread = static_cast<threadData *>(*state.to_userdata<void*>(1));
+	int lua_zmqJoinThread(lutok2::State & state){
+		Stack * stack = state.stack;
+		if (stack->is<LUA_TUSERDATA>(1)){
+			threadData * luaThread = getThread(1);
 			if (luaThread->thread.joinable()){
 				luaThread->thread.join();
 			}else{
@@ -124,33 +126,36 @@ namespace LuaZMQ {
 		return 0;
 	}
 
-	int lua_zmqFreeThread(lutok::state & state){
-		if (state.is_userdata(1)){
-			threadData * luaThread = static_cast<threadData *>(*state.to_userdata<void*>(1));
+	int lua_zmqFreeThread(lutok2::State & state){
+		Stack * stack = state.stack;
+		if (stack->is<LUA_TUSERDATA>(1)){
+			threadData * luaThread = getThread(1);
 			delete luaThread;
 		}
 		return 0;
 	}
 
-	int lua_zmqGet(lutok::state & state){
-		if (state.is_userdata(1) && state.is_number(2)){
-			int result = zmq_ctx_get(getZMQobject(1), state.to_integer(2));
+	int lua_zmqGet(lutok2::State & state){
+		Stack * stack = state.stack;
+		if (stack->is<LUA_TUSERDATA>(1) && stack->is<LUA_TNUMBER>(2)){
+			int result = zmq_ctx_get(getZMQobject(1), stack->to<int>(2));
 			if (result == -1){
-				state.push_boolean(false);
+				stack->push<bool>(false);
 				lua_pushZMQ_error(state);
 				return 2;
 			}else{
-				state.push_integer(result);
+				stack->push<int>(result);
 				return 1;
 			}
 		}
 		return 0;
 	}
 
-	int lua_zmqSet(lutok::state & state){
-		if (state.is_userdata(1) && state.is_number(2) && state.is_number(3)){
-			if (zmq_ctx_set(getZMQobject(1), state.to_integer(2), state.to_integer(3)) == -1){
-				state.push_boolean(false);
+	int lua_zmqSet(lutok2::State & state){
+		Stack * stack = state.stack;
+		if (stack->is<LUA_TUSERDATA>(1) && stack->is<LUA_TNUMBER>(2) && stack->is<LUA_TNUMBER>(3)){
+			if (zmq_ctx_set(getZMQobject(1), stack->to<int>(2), stack->to<int>(3)) == -1){
+				stack->push<bool>(false);
 				lua_pushZMQ_error(state);
 				return 2;
 			}
@@ -158,30 +163,30 @@ namespace LuaZMQ {
 		return 0;
 	}
 
-	int lua_zmqSocket(lutok::state & state){
-		if (state.is_userdata(1) && state.is_number(2)){
-			int type = state.to_integer(2);
+	int lua_zmqSocket(lutok2::State & state){
+		Stack * stack = state.stack;
+		if (stack->is<LUA_TUSERDATA>(1) && stack->is<LUA_TNUMBER>(2)){
+			int type = stack->to<int>(2);
 			void * context = getZMQobject(1);
 			void * socket = zmq_socket(context, type);
 			if (socket){
-				state.push_userdata(socket);
-				state.new_table();
-				state.set_metatable();
+				pushSocket(socket);
 				return 1;
 			}else{
-				state.push_boolean(false);
+				stack->push<bool>(false);
 				lua_pushZMQ_error(state);
 				return 2;
 			}
 		}
-		state.push_boolean(false);
+		stack->push<bool>(false);
 		return 1;
 	}
 
-	int lua_zmqClose(lutok::state & state){
-		if (state.is_userdata(1)){
+	int lua_zmqClose(lutok2::State & state){
+		Stack * stack = state.stack;
+		if (stack->is<LUA_TUSERDATA>(1)){
 			if (zmq_close(getZMQobject(1)) != 0){
-				state.push_boolean(false);
+				stack->push<bool>(false);
 				lua_pushZMQ_error(state);
 				return 2;
 			}
@@ -189,87 +194,90 @@ namespace LuaZMQ {
 		return 0;
 	}
 
-	int lua_zmqSetSockOpt(lutok::state & state){
-		if (state.is_userdata(1) && state.is_number(2)){
+	int lua_zmqSetSockOpt(lutok2::State & state){
+		Stack * stack = state.stack;
+		if (stack->is<LUA_TUSERDATA>(1) && stack->is<LUA_TNUMBER>(2)){
 			const void * value = nullptr;
 			std::string str;
 			size_t size = 0;
-			int option = state.to_integer(2);
-			if (state.is_number(3)){
-				int v = state.to_integer(3);
+			int option = stack->to<int>(2);
+			if (stack->is<LUA_TNUMBER>(3)){
+				int v = stack->to<int>(3);
 				value = static_cast<const void *>(&v);
 				size = sizeof(v);
-			}else if (state.is_string(3)){
-				str = state.to_string();
+			}else if (stack->is<LUA_TSTRING>(3)){
+				str = stack->to<const std::string>();
 				value = const_cast<const char *>(str.c_str());
 				size = str.length();
 			}
 			int result = zmq_setsockopt(getZMQobject(1), option, value, size);
 			if (result == -1){
-				state.push_boolean(false);
+				stack->push<bool>(false);
 				lua_pushZMQ_error(state);
 				return 2;
 			}else{
-				state.push_boolean(true);
+				stack->push<bool>(true);
 				return 1;
 			}
 		}
 		return 0;
 	}
 
-	int lua_zmqGetSockOptI(lutok::state & state){
-		if (state.is_userdata(1) && state.is_number(2)){
+	int lua_zmqGetSockOptI(lutok2::State & state){
+		Stack * stack = state.stack;
+		if (stack->is<LUA_TUSERDATA>(1) && stack->is<LUA_TNUMBER>(2)){
 			int v = 0;
 			void * value = &v;
 			size_t size = sizeof(v);
-			int option = state.to_integer(2);
+			int option = stack->to<int>(2);
 
 			if (zmq_getsockopt(getZMQobject(1), option, value, &size) == -1){
-				state.push_boolean(false);
+				stack->push<bool>(false);
 				lua_pushZMQ_error(state);
 				return 2;
 			}else{
-				state.push_integer(v);
+				stack->push<int>(v);
 				return 1;
 			}
 		}
 		return 0;
 	}
-	int lua_zmqGetSockOptS(lutok::state & state){
-		if (state.is_userdata(1) && state.is_number(2)){
+	int lua_zmqGetSockOptS(lutok2::State & state){
+		Stack * stack = state.stack;
+		if (stack->is<LUA_TUSERDATA>(1) && stack->is<LUA_TNUMBER>(2)){
 			char v[1024];
 			void * value = v;
 			size_t size = sizeof(v);
-			int option = state.to_integer(2);
+			int option = stack->to<int>(2);
 
 			if (zmq_getsockopt(getZMQobject(1), option, value, &size) == -1){
-				state.push_boolean(false);
+				stack->push<bool>(false);
 				lua_pushZMQ_error(state);
 				return 2;
 			}else{
-				state.push_lstring(v, size);
+				stack->pushLString(v, size);
 				return 1;
 			}
 		}
 		return 0;
 	}
 
-	int lua_zmqPollNew(lutok::state & state){
+	int lua_zmqPollNew(lutok2::State & state){
+		Stack * stack = state.stack;
 		pollArray_t * poll = new pollArray_t;
 		if (poll){
-			if (state.is_number(1)){
-				poll->items.reserve(state.to_integer(1));
+			if (stack->is<LUA_TNUMBER>(1)){
+				poll->items.reserve(stack->to<int>(1));
 			}
 
-			state.push_userdata(poll);
-			state.new_table();
-			state.set_metatable();
+			pushUData(poll);
 			return 1;
 		}
 		return 0;
 	}
-	int lua_zmqPollFree(lutok::state & state){
-		if (state.is_userdata(1)){
+	int lua_zmqPollFree(lutok2::State & state){
+		Stack * stack = state.stack;
+		if (stack->is<LUA_TUSERDATA>(1)){
 			pollArray_t * poll = static_cast<pollArray_t *>(getZMQobject(1));
 			if (poll){
 				poll->items.clear();
@@ -279,21 +287,22 @@ namespace LuaZMQ {
 		return 0;
 	}
 
-	int lua_zmqPollGet(lutok::state & state){
-		if (state.is_userdata(1) && state.is_number(2)){
+	int lua_zmqPollGet(lutok2::State & state){
+		Stack * stack = state.stack;
+		if (stack->is<LUA_TUSERDATA>(1) && stack->is<LUA_TNUMBER>(2)){
 			pollArray_t * poll = static_cast<pollArray_t *>(getZMQobject(1));
 			if (poll){
-				size_t index = state.to_integer(2);
+				size_t index = stack->to<int>(2);
 				if ((index>=0) && (index<poll->items.size())){
 					zmq_pollitem_t & item = poll->items[index];
-					state.new_table();
-						state.push_literal("socket");
-						state.push_userdata(item.socket);
-						state.set_table();
+					stack->newTable();
+						stack->pushLiteral("socket");
+						pushSocket(item.socket);
+						stack->setTable();
 
-						state.set_field("fd", static_cast<int>(item.fd));
-						state.set_field("events", static_cast<int>(item.events));
-						state.set_field("revents", static_cast<int>(item.revents));
+						stack->setField<int>("fd", static_cast<int>(item.fd));
+						stack->setField<int>("events", static_cast<int>(item.events));
+						stack->setField<int>("revents", static_cast<int>(item.revents));
 					return 1;
 				}
 			}
@@ -301,71 +310,72 @@ namespace LuaZMQ {
 		return 0;
 	}
 
-	int lua_zmqPollSet(lutok::state & state){
-		if (state.is_userdata(1)){
+	int lua_zmqPollSet(lutok2::State & state){
+		Stack * stack = state.stack;
+		if (stack->is<LUA_TUSERDATA>(1)){
 			pollArray_t * poll = static_cast<pollArray_t *>(getZMQobject(1));
 			if (poll){
-				if (state.is_number(2) && state.is_table(3)){
-					size_t index = state.to_integer(2);
+				if (stack->is<LUA_TNUMBER>(2) && stack->is<LUA_TTABLE>(3)){
+					size_t index = stack->to<int>(2);
 					if ((index>=0) && (index<poll->items.size())){
 						zmq_pollitem_t & item = poll->items[index];
 
-						state.get_field(3, "socket");
-						if (state.is_userdata(-1)){
+						stack->getField("socket", 3);
+						if (stack->is<LUA_TUSERDATA>(-1)){
 							item.socket = getZMQobject(-1);
 						}
-						state.pop(1);
+						stack->pop(1);
 
-						state.get_field(3, "fd");
-						if (state.is_number(-1)){
-							item.fd = state.to_integer(-1);
+						stack->getField("fd", 3);
+						if (stack->is<LUA_TNUMBER>(-1)){
+							item.fd = stack->to<int>(-1);
 						}
-						state.pop(1);
+						stack->pop(1);
 
-						state.get_field(3, "events");
-						if (state.is_number(-1)){
-							item.events = static_cast<short>(state.to_integer(-1));
+						stack->getField("events", 3);
+						if (stack->is<LUA_TNUMBER>(-1)){
+							item.events = static_cast<short>(stack->to<int>(-1));
 						}
-						state.pop(1);
+						stack->pop(1);
 
-						state.get_field(3, "revents");
-						if (state.is_number(-1)){
-							item.revents = static_cast<short>(state.to_integer(-1));
+						stack->getField("revents", 3);
+						if (stack->is<LUA_TNUMBER>(-1)){
+							item.revents = static_cast<short>(stack->to<int>(-1));
 						}
-						state.pop(1);
+						stack->pop(1);
 
-						state.push_boolean(true);
+						stack->push<bool>(true);
 						return 1;
 					}
-				}else if (state.is_table(2)){
+				}else if (stack->is<LUA_TTABLE>(2)){
 					zmq_pollitem_t item;
 
-					state.get_field(2, "socket");
-					if (state.is_userdata(-1)){
+					stack->getField("socket", 2);
+					if (stack->is<LUA_TUSERDATA>(-1)){
 						item.socket = getZMQobject(-1);
 					}
-					state.pop(1);
+					stack->pop(1);
 
-					state.get_field(2, "fd");
-					if (state.is_number(-1)){
-						item.fd = state.to_integer(-1);
+					stack->getField("fd", 2);
+					if (stack->is<LUA_TNUMBER>(-1)){
+						item.fd = stack->to<int>(-1);
 					}
-					state.pop(1);
+					stack->pop(1);
 
-					state.get_field(2, "events");
-					if (state.is_number(-1)){
-						item.events = static_cast<short>(state.to_integer(-1));
+					stack->getField("events", 2);
+					if (stack->is<LUA_TNUMBER>(-1)){
+						item.events = static_cast<short>(stack->to<int>(-1));
 					}
-					state.pop(1);
+					stack->pop(1);
 
-					state.get_field(2, "revents");
-					if (state.is_number(-1)){
-						item.revents = static_cast<short>(state.to_integer(-1));
+					stack->getField("revents", 2);
+					if (stack->is<LUA_TNUMBER>(-1)){
+						item.revents = static_cast<short>(stack->to<int>(-1));
 					}
-					state.pop(1);
+					stack->pop(1);
 
 					poll->items.push_back(item);
-					state.push_boolean(true);
+					stack->push<bool>(true);
 					return 1;
 				}
 			}
@@ -373,34 +383,36 @@ namespace LuaZMQ {
 		return 0;
 	}
 
-	int lua_zmqPollSize(lutok::state & state){
-		if (state.is_userdata(1)){
+	int lua_zmqPollSize(lutok2::State & state){
+		Stack * stack = state.stack;
+		if (stack->is<LUA_TUSERDATA>(1)){
 			pollArray_t * poll = static_cast<pollArray_t *>(getZMQobject(1));
 			if (poll){
-				state.push_integer(poll->items.size());
+				stack->push<int>(poll->items.size());
 				return 1;
 			}
 		}
 		return 0;
 	}
 
-	int lua_zmqPoll(lutok::state & state){
-		if (state.is_userdata(1)){
+	int lua_zmqPoll(lutok2::State & state){
+		Stack * stack = state.stack;
+		if (stack->is<LUA_TUSERDATA>(1)){
 			pollArray_t * poll = static_cast<pollArray_t *>(getZMQobject(1));
 			if (poll){
 				zmq_pollitem_t *items = poll->items.data();
 				if (items && poll->items.size()>0){
 					int timeout = -1;
-					if (state.is_number(2)){
-						timeout = state.to_integer(2);
+					if (stack->is<LUA_TNUMBER>(2)){
+						timeout = stack->to<int>(2);
 					}
 					int result = zmq_poll(items, poll->items.size(), timeout);
 					if (result < 0){
-						state.push_boolean(false);
+						stack->push<bool>(false);
 						lua_pushZMQ_error(state);
 						return 2;
 					}else{
-						state.push_integer(result);
+						stack->push<int>(result);
 						return 1;
 					}
 				}
@@ -409,68 +421,73 @@ namespace LuaZMQ {
 		return 0;
 	}
 
-	int lua_zmqBind(lutok::state & state){
-		if (state.is_userdata(1) && state.is_string(2)){
-			if (zmq_bind(getZMQobject(1), state.to_string(2).c_str()) != 0){
-				state.push_boolean(false);
+	int lua_zmqBind(lutok2::State & state){
+		Stack * stack = state.stack;
+		if (stack->is<LUA_TUSERDATA>(1) && stack->is<LUA_TSTRING>(2)){
+			if (zmq_bind(getZMQobject(1), stack->to<const std::string>(2).c_str()) != 0){
+				stack->push<bool>(false);
 				lua_pushZMQ_error(state);
 				return 2;
 			}else{
-				state.push_boolean(true);
+				stack->push<bool>(true);
 				return 1;
 			}
 		}
 		return 0;
 	}
 
-	int lua_zmqUnbind(lutok::state & state){
-		if (state.is_userdata(1) && state.is_string(2)){
-			if (zmq_unbind(getZMQobject(1), state.to_string(2).c_str()) != 0){
-				state.push_boolean(false);
+	int lua_zmqUnbind(lutok2::State & state){
+		Stack * stack = state.stack;
+		if (stack->is<LUA_TUSERDATA>(1) && stack->is<LUA_TSTRING>(2)){
+			if (zmq_unbind(getZMQobject(1), stack->to<const std::string>(2).c_str()) != 0){
+				stack->push<bool>(false);
 				lua_pushZMQ_error(state);
 				return 2;
 			}else{
-				state.push_boolean(true);
+				stack->push<bool>(true);
 				return 1;
 			}
 		}
 		return 0;
 	}
 
-	int lua_zmqConnect(lutok::state & state){
-		if (state.is_userdata(1) && state.is_string(2)){
-			if (zmq_connect(getZMQobject(1), state.to_string(2).c_str()) != 0){
-				state.push_boolean(false);
+	int lua_zmqConnect(lutok2::State & state){
+		Stack * stack = state.stack;
+		if (stack->is<LUA_TUSERDATA>(1) && stack->is<LUA_TSTRING>(2)){
+			if (zmq_connect(getZMQobject(1), stack->to<const std::string>(2).c_str()) != 0){
+				stack->push<bool>(false);
 				lua_pushZMQ_error(state);
 				return 2;
 			}else{
-				state.push_boolean(true);
+				stack->push<bool>(true);
 				return 1;
 			}
 		}
 		return 0;
 	}
 
-	int lua_zmqDisconnect(lutok::state & state){
-		if (state.is_userdata(1) && state.is_string(2)){
-			if (zmq_disconnect(getZMQobject(1), state.to_string(2).c_str()) != 0){
-				state.push_boolean(false);
+	int lua_zmqDisconnect(lutok2::State & state){
+		Stack * stack = state.stack;
+		if (stack->is<LUA_TUSERDATA>(1) && stack->is<LUA_TSTRING>(2)){
+			if (zmq_disconnect(getZMQobject(1), stack->to<const std::string>(2).c_str()) != 0){
+				stack->push<bool>(false);
 				lua_pushZMQ_error(state);
 				return 2;
 			}else{
-				state.push_boolean(true);
+				stack->push<bool>(true);
 				return 1;
 			}
 		}
 		return 0;
 	}
 
-	int lua_zmqProxy(lutok::state & state){
-		if (state.is_userdata(1) && state.is_userdata(2)){
+	int lua_zmqProxy(lutok2::State & state){
+		Stack * stack = state.stack;
+		if (stack->is<LUA_TUSERDATA>(1) && stack->is<LUA_TUSERDATA>(2)){
 			void * frontend = getZMQobject(1);
 			void * backend = getZMQobject(2);
 			void * capture = nullptr;
-			if (state.is_userdata(3)){
+			if (stack->is<LUA_TUSERDATA>(3)){
 				capture = getZMQobject(3);
 			}
 			zmq_proxy(frontend, backend, capture);
@@ -478,12 +495,13 @@ namespace LuaZMQ {
 		return 0;
 	}
 #if (ZMQ_VERSION_MAJOR>=4) && (ZMQ_VERSION_MINOR>=0) && (ZMQ_VERSION_PATCH>=5)
-	int lua_zmqProxySteerable(lutok::state & state){
-		if (state.is_userdata(1) && state.is_userdata(2)){
+	int lua_zmqProxySteerable(lutok2::State & state){
+		Stack * stack = state.stack;
+		if (stack->is<LUA_TUSERDATA>(1) && stack->is<LUA_TUSERDATA>(2)){
 			void * frontend = getZMQobject(1);
 			void * backend = getZMQobject(2);
 			void * capture = nullptr;
-			if (state.is_userdata(3)){
+			if (stack->is<LUA_TUSERDATA>(3)){
 				capture = getZMQobject(3);
 			}
 			void * control = getZMQobject(4);
@@ -492,35 +510,37 @@ namespace LuaZMQ {
 		return 0;
 	}
 #endif
-	int lua_zmqVersion(lutok::state & state){
+	int lua_zmqVersion(lutok2::State & state){
+		Stack * stack = state.stack;
 		int major = 0, minor= 0, patch = 0;
 		zmq_version(&major, &minor, &patch);
-		state.push_integer(major);
-		state.push_integer(minor);
-		state.push_integer(patch);
+		stack->push<int>(major);
+		stack->push<int>(minor);
+		stack->push<int>(patch);
 		return 3;
 	}
 
-	int lua_zmqRecv(lutok::state & state){
-		if (state.is_userdata(1)){
+	int lua_zmqRecv(lutok2::State & state){
+		Stack * stack = state.stack;
+		if (stack->is<LUA_TUSERDATA>(1)){
 			size_t len = BUFFER_SIZE;
-			if (state.is_number(2)){
-				len = state.to_integer(2);
+			if (stack->is<LUA_TNUMBER>(2)){
+				len = stack->to<int>(2);
 			}
 			if (len>0){
 				int flags = 0;
-				if (state.is_number(3)){
-					flags = state.to_integer(3);
+				if (stack->is<LUA_TNUMBER>(3)){
+					flags = stack->to<int>(3);
 				}
 				char * buffer = static_cast<char*>(_alloca(len));
 				int result = zmq_recv(getZMQobject(1), buffer, len, flags);
 				if (result < 0){
-					state.push_boolean(false);
+					stack->push<bool>(false);
 					lua_pushZMQ_error(state);
 					return 2;
 				}else{
-					state.push_lstring(buffer, (result <= len) ? result : len);
-					state.push_integer(result);
+					stack->pushLString(buffer, (result <= len) ? result : len);
+					stack->push<int>(result);
 					return 2;
 				}
 			}
@@ -528,16 +548,17 @@ namespace LuaZMQ {
 		return 0;
 	}
 
-	int lua_zmqRecvAll(lutok::state & state){
-		if (state.is_userdata(1)){
+	int lua_zmqRecvAll(lutok2::State & state){
+		Stack * stack = state.stack;
+		if (stack->is<LUA_TUSERDATA>(1)){
 			int flags = 0;
-			if (state.is_number(2)){
-				flags = state.to_integer(2);
+			if (stack->is<LUA_TNUMBER>(2)){
+				flags = stack->to<int>(2);
 			}
 			//input buffer size
 			size_t bufferSize = BUFFER_SIZE;
-			if (state.is_number(3)){
-				bufferSize = state.to_integer(3);
+			if (stack->is<LUA_TNUMBER>(3)){
+				bufferSize = stack->to<int>(3);
 			}
 
 			char * buffer = static_cast<char*>(_alloca(bufferSize));
@@ -551,7 +572,7 @@ namespace LuaZMQ {
 				int result = zmq_recv(socket, buffer, bufferSize, flags);
 
 				if (result < 0){
-					state.push_boolean(false);
+					stack->push<bool>(false);
 					lua_pushZMQ_error(state);
 					return 2;
 				}else{
@@ -560,23 +581,23 @@ namespace LuaZMQ {
 				zmq_getsockopt(socket, ZMQ_RCVMORE, &more, &moreSize);
 			}
 
-			state.push_lstring(fullBuffer.c_str(), fullBuffer.size());
+			stack->pushLString(fullBuffer.c_str(), fullBuffer.size());
 			return 1;
 		}
 		return 0;
 	}
 
-	int lua_zmqRecvMultipart(lutok::state & state){
-		if (state.is_userdata(1)){
-			int l0 = state.get_top();
+	int lua_zmqRecvMultipart(lutok2::State & state){
+		Stack * stack = state.stack;
+		if (stack->is<LUA_TUSERDATA>(1)){
 			int flags = 0;
-			if (state.is_number(2)){
-				flags = state.to_integer(2);
+			if (stack->is<LUA_TNUMBER>(2)){
+				flags = stack->to<int>(2);
 			}
 			//input buffer size
 			size_t bufferSize = BUFFER_SIZE;
-			if (state.is_number(3)){
-				bufferSize = state.to_integer(3);
+			if (stack->is<LUA_TNUMBER>(3)){
+				bufferSize = stack->to<int>(3);
 			}
 
 			char * buffer = static_cast<char*>(_alloca(bufferSize));
@@ -585,26 +606,25 @@ namespace LuaZMQ {
 			int more=1;
 			size_t moreSize = sizeof(more);
 
-			state.new_table();
+			stack->newTable();
 			size_t partNum = 1;
 			size_t filledPartNum = 0;
 			size_t bytesRead = 0;
 
 			while (more == 1){
 				int result = zmq_recv(socket, buffer, bufferSize, flags);
-				int l01 = state.get_top();
 				if (result < 0){
-					state.pop(1); //pop table
-					state.push_boolean(false);
+					stack->pop(1); //pop table
+					stack->push<bool>(false);
 					lua_pushZMQ_error(state);
 					return 2;
 				}else{
 					//is this part delimiter
 					if ((filledPartNum > 0) && (result == 0)){
 						//flush buffer
-						state.push_integer(partNum++);
-						state.push_lstring(fullBuffer.c_str(), fullBuffer.length());
-						state.set_table();
+						stack->push<int>(partNum++);
+						stack->pushLString(fullBuffer.c_str(), fullBuffer.length());
+						stack->setTable();
 						fullBuffer.clear();
 						filledPartNum = 0;
 						bytesRead = 0;
@@ -617,9 +637,9 @@ namespace LuaZMQ {
 							//is buffer full?
 							if (bytesRead > MAX_BUFFER_SIZE){
 								//flush buffer
-								state.push_integer(partNum++);
-								state.push_lstring(fullBuffer.c_str(), fullBuffer.length());
-								state.set_table();
+								stack->push<int>(partNum++);
+								stack->pushLString(fullBuffer.c_str(), fullBuffer.length());
+								stack->setTable();
 								fullBuffer.clear();
 								filledPartNum = 0;
 								bytesRead = 0;
@@ -629,46 +649,44 @@ namespace LuaZMQ {
 				}
 				zmq_getsockopt(socket, ZMQ_RCVMORE, &more, &moreSize);
 			}
-			int l1 = state.get_top();
 			if (partNum==1 && filledPartNum>0){
-				state.push_integer(partNum);
-				state.push_lstring(fullBuffer.c_str(), fullBuffer.length());
-				state.set_table();
+				stack->push<int>(partNum);
+				stack->pushLString(fullBuffer.c_str(), fullBuffer.length());
+				stack->setTable();
 			}
-			int l2 = state.get_top();
-
 			return 1;
 		}
 		return 0;
 	} 
 
-	int lua_zmqSend(lutok::state & state){
-		if (state.is_userdata(1) && state.is_string(2)){
-			std::string & buffer = state.to_lstring(2);
+	int lua_zmqSend(lutok2::State & state){
+		Stack * stack = state.stack;
+		if (stack->is<LUA_TUSERDATA>(1) && stack->is<LUA_TSTRING>(2)){
+			std::string & buffer = stack->toLString(2);
 			size_t len = buffer.length();
 			int flags = 0;
-			if (state.is_number(3)){
-				flags = state.to_integer(3);
+			if (stack->is<LUA_TNUMBER>(3)){
+				flags = stack->to<int>(3);
 			}
 
 			if (len>0){
 				int result = zmq_send(getZMQobject(1), buffer.c_str(), len, flags);
 				if (result < 0){
-					state.push_boolean(false);
+					stack->push<bool>(false);
 					lua_pushZMQ_error(state);
 					return 2;
 				}else{
-					state.push_integer(result);
+					stack->push<int>(result);
 					return 1;
 				}
 			}else{
 				int result = zmq_send(getZMQobject(1), nullptr, 0, flags);
 				if (result < 0){
-					state.push_boolean(false);
+					stack->push<bool>(false);
 					lua_pushZMQ_error(state);
 					return 2;
 				}else{
-					state.push_integer(result);
+					stack->push<int>(result);
 					return 1;
 				}
 			}
@@ -676,30 +694,31 @@ namespace LuaZMQ {
 		return 0;
 	}
 
-	int lua_zmqSendMultipart(lutok::state & state){
-		if (state.is_userdata(1) && state.is_table(2)){
+	int lua_zmqSendMultipart(lutok2::State & state){
+		Stack * stack = state.stack;
+		if (stack->is<LUA_TUSERDATA>(1) && stack->is<LUA_TTABLE>(2)){
 			int flags = 0;
-			if (state.is_number(3)){
-				flags = state.to_integer(3);
+			if (stack->is<LUA_TNUMBER>(3)){
+				flags = stack->to<int>(3);
 			}
 			//input buffer size
 			size_t bufferSize = BUFFER_SIZE;
-			if (state.is_number(4)){
-				bufferSize = state.to_integer(4);
+			if (stack->is<LUA_TNUMBER>(4)){
+				bufferSize = stack->to<int>(4);
 			}
 
-			size_t parts = state.obj_len(2);
+			size_t parts = stack->objLen(2);
 			size_t partsSent = 0;
 			/*
 				Each part is represented by element in Lua table.
 				All parts are sent with ZMQ_SNDMORE flag on and divided with empty ZMQ frame.
 			*/
 			for (size_t partIndex=1; partIndex <= parts; partIndex++){
-				state.push_integer(partIndex);
-				state.get_table(2);
+				stack->push<int>(partIndex);
+				stack->getTable(2);
 
-				if (state.is_string()){
-					std::string & buffer = state.to_lstring();
+				if (stack->is<LUA_TSTRING>()){
+					std::string & buffer = stack->toLString();
 					size_t len = buffer.length();
 					size_t offset = 0;
 					const char * inputBuffer = buffer.c_str();
@@ -712,8 +731,8 @@ namespace LuaZMQ {
 
 							int result = zmq_send(getZMQobject(1), inputBuffer+offset, outputSize, finalFlags);
 							if (result < 0){
-								state.pop(1);
-								state.push_boolean(false);
+								stack->pop(1);
+								stack->push<bool>(false);
 								lua_pushZMQ_error(state);
 								return 2;
 							}else{
@@ -727,41 +746,40 @@ namespace LuaZMQ {
 						// send a delimiter
 						int result = zmq_send(getZMQobject(1), nullptr, 0, finalFlags);
 						if (result < 0){
-							state.pop(1);
-							state.push_boolean(false);
+							stack->pop(1);
+							stack->push<bool>(false);
 							lua_pushZMQ_error(state);
 							return 2;
 						}
 					}
 				}
-				state.pop(1);
+				stack->pop(1);
 			}
-			state.push_integer(partsSent);
+			stack->push<int>(partsSent);
 			return 1;
 		}
 		return 0;
 	}
 	
-	int lua_zmqMsgInit(lutok::state & state){
+	int lua_zmqMsgInit(lutok2::State & state){
+		Stack * stack = state.stack;
 		zmq_msg_t * msg = new zmq_msg_t;
 		if (msg){
 			size_t size = 0;
 			int result = 0;
-			if (state.is_number(1)){
-				result = zmq_msg_init_size(msg, state.to_integer(1));
+			if (stack->is<LUA_TNUMBER>(1)){
+				result = zmq_msg_init_size(msg, stack->to<int>(1));
 			}else{
 				result = zmq_msg_init(msg);
 			}
 
 			if (result != 0){
 				delete msg;
-				state.push_boolean(false);
+				stack->push<bool>(false);
 				lua_pushZMQ_error(state);
 				return 2;
 			}else{
-				state.push_userdata(msg);
-				state.new_table();
-				state.set_metatable();
+				pushUData(msg);
 				return 1;
 			}
 		}else{
@@ -769,12 +787,13 @@ namespace LuaZMQ {
 		}
 	}
 
-	int lua_zmqMsgClose(lutok::state & state){
-		if (state.is_userdata(1)){
+	int lua_zmqMsgClose(lutok2::State & state){
+		Stack * stack = state.stack;
+		if (stack->is<LUA_TUSERDATA>(1)){
 			zmq_msg_t * msg = static_cast<zmq_msg_t*>(getZMQobject(1));
 			if (msg){
 				if (zmq_msg_close(msg) != 0){
-					state.push_boolean(false);
+					stack->push<bool>(false);
 					lua_pushZMQ_error(state);
 				}else{
 					delete msg;
@@ -782,76 +801,80 @@ namespace LuaZMQ {
 				}
 			}
 		}
-		state.push_boolean(false);
+		stack->push<bool>(false);
 		return 1;
 	}
 
-	int lua_zmqMsgCopy(lutok::state & state){
-		if (state.is_userdata(1) && state.is_userdata(2)){
+	int lua_zmqMsgCopy(lutok2::State & state){
+		Stack * stack = state.stack;
+		if (stack->is<LUA_TUSERDATA>(1) && stack->is<LUA_TUSERDATA>(2)){
 			zmq_msg_t * msg_src = static_cast<zmq_msg_t*>(getZMQobject(1));
 			zmq_msg_t * msg_dest = static_cast<zmq_msg_t*>(getZMQobject(2));
 			if (msg_src && msg_dest){
 				if (zmq_msg_copy(msg_dest, msg_src) != 0){
-					state.push_boolean(false);
+					stack->push<bool>(false);
 					lua_pushZMQ_error(state);
 				}else{
-					state.push_boolean(true);
+					stack->push<bool>(true);
 					return 1;
 				}
 			}
 		}
-		state.push_boolean(false);
+		stack->push<bool>(false);
 		return 1;
 	}
 
-	int lua_zmqMsgMove(lutok::state & state){
-		if (state.is_userdata(1) && state.is_userdata(2)){
+	int lua_zmqMsgMove(lutok2::State & state){
+		Stack * stack = state.stack;
+		if (stack->is<LUA_TUSERDATA>(1) && stack->is<LUA_TUSERDATA>(2)){
 			zmq_msg_t * msg_src = static_cast<zmq_msg_t*>(getZMQobject(1));
 			zmq_msg_t * msg_dest = static_cast<zmq_msg_t*>(getZMQobject(2));
 			if (msg_src && msg_dest){
 				if (zmq_msg_move(msg_dest, msg_src) != 0){
-					state.push_boolean(false);
+					stack->push<bool>(false);
 					lua_pushZMQ_error(state);
 				}else{
-					state.push_boolean(true);
+					stack->push<bool>(true);
 					return 1;
 				}
 			}
 		}
-		state.push_boolean(false);
+		stack->push<bool>(false);
 		return 1;
 	}
 
-	int lua_zmqMsgGetData(lutok::state & state){
-		if (state.is_userdata(1)){
+	int lua_zmqMsgGetData(lutok2::State & state){
+		Stack * stack = state.stack;
+		if (stack->is<LUA_TUSERDATA>(1)){
 			zmq_msg_t * msg = static_cast<zmq_msg_t*>(getZMQobject(1));
 			if (msg){
 				void * result = zmq_msg_data(msg);
 				if (!result){
-					state.push_boolean(false);
+					stack->push<bool>(false);
 					lua_pushZMQ_error(state);
 				}else{
 					size_t size = zmq_msg_size(msg);
-					state.push_lstring(static_cast<char *>(result), size);
+					stack->pushLString(static_cast<char *>(result), size);
 					return 1;
 				}
 			}
 		}
-		state.push_boolean(false);
+		stack->push<bool>(false);
 		return 1;
 	}
 
-	int lua_zmqMsgSetData(lutok::state & state){
-		if (state.is_userdata(1) && state.is_string(2)){
+	int lua_zmqMsgSetData(lutok2::State & state){
+		Stack * stack = state.stack;
+		if (stack->is<LUA_TUSERDATA>(1) && stack->is<LUA_TSTRING>(2)){
 			zmq_msg_t * msg = static_cast<zmq_msg_t*>(getZMQobject(1));
 			if (msg){
 				void * result = zmq_msg_data(msg);
 				if (!result){
-					state.push_boolean(false);
+					stack->push<bool>(false);
 					lua_pushZMQ_error(state);
 				}else{
 					size_t dest_size = zmq_msg_size(msg);
-					std::string & src = state.to_lstring(2);
+					std::string & src = stack->toLString(2);
 					size_t src_size = src.length();
 
 					if (src_size <= dest_size){
@@ -860,7 +883,7 @@ namespace LuaZMQ {
 						zmq_msg_close(msg);
 						if (zmq_msg_init_size(msg, src_size) != 0){
 							delete msg;
-							state.push_boolean(false);
+							stack->push<bool>(false);
 							lua_pushZMQ_error(state);
 							return 2;
 						}else{
@@ -871,47 +894,50 @@ namespace LuaZMQ {
 				}
 			}
 		}
-		state.push_boolean(false);
+		stack->push<bool>(false);
 		return 1;
 	}
 
-	int lua_zmqMsgSize(lutok::state & state){
-		if (state.is_userdata(1)){
+	int lua_zmqMsgSize(lutok2::State & state){
+		Stack * stack = state.stack;
+		if (stack->is<LUA_TUSERDATA>(1)){
 			zmq_msg_t * msg = static_cast<zmq_msg_t*>(getZMQobject(1));
 			if (msg){
 				size_t size = zmq_msg_size(msg);
-				state.push_integer(size);
+				stack->push<int>(size);
 				return 1;
 			}
 		}
-		state.push_boolean(false);
+		stack->push<bool>(false);
 		return 1;
 	}
 
-	int lua_zmqMsgMore(lutok::state & state){
-		if (state.is_userdata(1)){
+	int lua_zmqMsgMore(lutok2::State & state){
+		Stack * stack = state.stack;
+		if (stack->is<LUA_TUSERDATA>(1)){
 			zmq_msg_t * msg = static_cast<zmq_msg_t*>(getZMQobject(1));
 			if (msg){
 				int  result = zmq_msg_more(msg);
-				state.push_integer(result);
+				stack->push<int>(result);
 				return 1;
 			}
 		}
-		state.push_boolean(false);
+		stack->push<bool>(false);
 		return 1;
 	}
 
-	int lua_zmqMsgGet(lutok::state & state){
-		if (state.is_userdata(1) && state.is_number(2)){
+	int lua_zmqMsgGet(lutok2::State & state){
+		Stack * stack = state.stack;
+		if (stack->is<LUA_TUSERDATA>(1) && stack->is<LUA_TNUMBER>(2)){
 			zmq_msg_t * msg = static_cast<zmq_msg_t*>(getZMQobject(1));
 			if (msg){
-				int result = zmq_msg_get(msg, state.to_integer(2));
+				int result = zmq_msg_get(msg, stack->to<int>(2));
 				if (result == -1){
-					state.push_boolean(false);
+					stack->push<bool>(false);
 					lua_pushZMQ_error(state);
 					return 2;
 				}else{
-					state.push_integer(result);
+					stack->push<int>(result);
 					return 1;
 				}
 			}
@@ -919,12 +945,13 @@ namespace LuaZMQ {
 		return 0;
 	}
 
-	int lua_zmqMsgSet(lutok::state & state){
-		if (state.is_userdata(1) && state.is_number(2) && state.is_number(3)){
+	int lua_zmqMsgSet(lutok2::State & state){
+		Stack * stack = state.stack;
+		if (stack->is<LUA_TUSERDATA>(1) && stack->is<LUA_TNUMBER>(2) && stack->is<LUA_TNUMBER>(3)){
 			zmq_msg_t * msg = static_cast<zmq_msg_t*>(getZMQobject(1));
 			if (msg){
-				if (zmq_msg_set(msg, state.to_integer(2), state.to_integer(3)) == -1){
-					state.push_boolean(false);
+				if (zmq_msg_set(msg, stack->to<int>(2), stack->to<int>(3)) == -1){
+					stack->push<bool>(false);
 					lua_pushZMQ_error(state);
 					return 2;
 				}
@@ -933,24 +960,25 @@ namespace LuaZMQ {
 		return 0;
 	}
 
-	int lua_zmqMsgRecv(lutok::state & state){
-		if (state.is_userdata(1) && state.is_userdata(2)){
+	int lua_zmqMsgRecv(lutok2::State & state){
+		Stack * stack = state.stack;
+		if (stack->is<LUA_TUSERDATA>(1) && stack->is<LUA_TUSERDATA>(2)){
 			zmq_msg_t * msg = static_cast<zmq_msg_t*>(getZMQobject(1));
 			void * socket = getZMQobject(2);
 
 			if (msg && socket){
 				int flags = 0;
-				if (state.is_number(3)){
-					flags = state.to_integer(3);
+				if (stack->is<LUA_TNUMBER>(3)){
+					flags = stack->to<int>(3);
 				}
 				int result = zmq_msg_recv(msg, socket, flags);
 
 				if (result == -1){
-					state.push_boolean(false);
+					stack->push<bool>(false);
 					lua_pushZMQ_error(state);
 					return 2;
 				}else{
-					state.push_integer(result);
+					stack->push<int>(result);
 					return 1;
 				}
 			}
@@ -958,24 +986,25 @@ namespace LuaZMQ {
 		return 0;
 	}
 
-	int lua_zmqMsgSend(lutok::state & state){
-		if (state.is_userdata(1) && state.is_userdata(2)){
+	int lua_zmqMsgSend(lutok2::State & state){
+		Stack * stack = state.stack;
+		if (stack->is<LUA_TUSERDATA>(1) && stack->is<LUA_TUSERDATA>(2)){
 			zmq_msg_t * msg = static_cast<zmq_msg_t*>(getZMQobject(1));
 			void * socket = getZMQobject(2);
 
 			if (msg && socket){
 				int flags = 0;
-				if (state.is_number(3)){
-					flags = state.to_integer(3);
+				if (stack->is<LUA_TNUMBER>(3)){
+					flags = stack->to<int>(3);
 				}
 				int result = zmq_msg_send(msg, socket, flags);
 
 				if (result == -1){
-					state.push_boolean(false);
+					stack->push<bool>(false);
 					lua_pushZMQ_error(state);
 					return 2;
 				}else{
-					state.push_integer(result);
+					stack->push<int>(result);
 					return 1;
 				}
 			}
@@ -983,61 +1012,64 @@ namespace LuaZMQ {
 		return 0;
 	}
 
-	int lua_zmqSleep(lutok::state & state){
-		if (state.is_number(1)){
-			zmq_sleep(state.to_integer(1));
+	int lua_zmqSleep(lutok2::State & state){
+		Stack * stack = state.stack;
+		if (stack->is<LUA_TNUMBER>(1)){
+			zmq_sleep(stack->to<int>(1));
 		}
 		return 0;
 	}
 
-	int lua_zmqStopwatchStart(lutok::state & state){
+	int lua_zmqStopwatchStart(lutok2::State & state){
+		Stack * stack = state.stack;
 		void * stopwatch = zmq_stopwatch_start();
-		state.push_userdata(stopwatch);
-		state.new_table();
-		state.set_metatable();
+		pushUData(stopwatch);
 		return 1;
 	}
-	int lua_zmqStopwatchStop(lutok::state & state){
-		if (state.is_userdata(1)){
+	int lua_zmqStopwatchStop(lutok2::State & state){
+		Stack * stack = state.stack;
+		if (stack->is<LUA_TUSERDATA>(1)){
 			void * stopwatch = getZMQobject(1);
 			if (stopwatch){
-				state.push_integer(zmq_stopwatch_stop(stopwatch));
+				stack->push<int>(zmq_stopwatch_stop(stopwatch));
 				return 1;
 			}
 		}
 		return 0;
 	}
-	int lua_zmqZ85Encode(lutok::state & state){
-		if (state.is_string(1)){
-			std::string data = state.to_lstring(1);
+	int lua_zmqZ85Encode(lutok2::State & state){
+		Stack * stack = state.stack;
+		if (stack->is<LUA_TSTRING>(1)){
+			std::string data = stack->toLString(1);
 			size_t length = data.length();
 			size_t newLength = static_cast<unsigned int>(ceil(length*1.25)+1);
 			char * buffer = new char[newLength];
 			if (zmq_z85_encode(buffer, reinterpret_cast<unsigned char*>(const_cast<char*>(data.c_str())), length) != NULL){
-				state.push_string(buffer);
+				stack->push<const std::string &>(buffer);
 			}else{
-				state.push_boolean(false);
+				stack->push<bool>(false);
 			}
 			delete buffer;
 			return 1;
 		}
 		return 0;
 	}
-	int lua_zmqZ85Decode(lutok::state & state){
-		if (state.is_string(1)){
-			std::string data = state.to_string(1);
+	int lua_zmqZ85Decode(lutok2::State & state){
+		Stack * stack = state.stack;
+		if (stack->is<LUA_TSTRING>(1)){
+			std::string data = stack->to<const std::string>(1);
 			size_t length = data.length();
 			if (length%5 == 0){
 				size_t newLength = static_cast<unsigned int>(ceil(length*0.8));
 				char * buffer = new char[newLength];
 				if (zmq_z85_decode(reinterpret_cast<unsigned char*>(buffer), const_cast<char*>(data.c_str())) != NULL){
-					state.push_lstring(buffer, newLength);
+					stack->pushLString(buffer, newLength);
 				}else{
-					state.push_boolean(false);
+					stack->push<bool>(false);
 				}
 				delete buffer;
 			}else{
-				state.push_boolean(false);
+				stack->push<bool>(false);
 			}
 			return 1;
 		}
@@ -1046,73 +1078,74 @@ namespace LuaZMQ {
 
 };
 
+extern "C" LIBLUAZMQ_DLL_EXPORTED int luaopen_luazmq(lua_State * L){
+	State * state = new State(L);
+	Stack * stack = state->stack;
+	module luazmq_module;
 
-extern "C" LUA_API int luaopen_luazmq(lua_State * L){
-	lutok::state state(L);
-	LuaZMQ::moduleDef module;
+	stack->newTable();
+	
+	luazmq_module["version"] = LuaZMQ::lua_zmqVersion;
+	luazmq_module["init"] = LuaZMQ::lua_zmqInit;
+	luazmq_module["term"] = LuaZMQ::lua_zmqTerm;
 
-	module["version"] = LuaZMQ::lua_zmqVersion;
-	module["init"] = LuaZMQ::lua_zmqInit;
-	module["term"] = LuaZMQ::lua_zmqTerm;
+	luazmq_module["socket"] = LuaZMQ::lua_zmqSocket;
+	luazmq_module["close"] = LuaZMQ::lua_zmqClose;
+	luazmq_module["socketSetOption"] = LuaZMQ::lua_zmqSetSockOpt;
+	luazmq_module["socketGetOptionI"] = LuaZMQ::lua_zmqGetSockOptI;
+	luazmq_module["socketGetOptionS"] = LuaZMQ::lua_zmqGetSockOptS;
 
-	module["socket"] = LuaZMQ::lua_zmqSocket;
-	module["close"] = LuaZMQ::lua_zmqClose;
-	module["socketSetOption"] = LuaZMQ::lua_zmqSetSockOpt;
-	module["socketGetOptionI"] = LuaZMQ::lua_zmqGetSockOptI;
-	module["socketGetOptionS"] = LuaZMQ::lua_zmqGetSockOptS;
+	luazmq_module["bind"] = LuaZMQ::lua_zmqBind;
+	luazmq_module["unbind"] = LuaZMQ::lua_zmqUnbind;
+	luazmq_module["connect"] = LuaZMQ::lua_zmqConnect;
+	luazmq_module["disconnect"] = LuaZMQ::lua_zmqDisconnect;
+	luazmq_module["shutdown"] = LuaZMQ::lua_zmqShutdown;
+	luazmq_module["recv"] = LuaZMQ::lua_zmqRecv;
+	luazmq_module["send"] = LuaZMQ::lua_zmqSend;
+	luazmq_module["get"] = LuaZMQ::lua_zmqGet;
+	luazmq_module["set"] = LuaZMQ::lua_zmqSet;
 
-	module["bind"] = LuaZMQ::lua_zmqBind;
-	module["unbind"] = LuaZMQ::lua_zmqUnbind;
-	module["connect"] = LuaZMQ::lua_zmqConnect;
-	module["disconnect"] = LuaZMQ::lua_zmqDisconnect;
-	module["shutdown"] = LuaZMQ::lua_zmqShutdown;
-	module["recv"] = LuaZMQ::lua_zmqRecv;
-	module["send"] = LuaZMQ::lua_zmqSend;
-	module["get"] = LuaZMQ::lua_zmqGet;
-	module["set"] = LuaZMQ::lua_zmqSet;
+	luazmq_module["recvAll"] = LuaZMQ::lua_zmqRecvAll;
+	luazmq_module["recvMultipart"] = LuaZMQ::lua_zmqRecvMultipart;
+	luazmq_module["sendMultipart"] = LuaZMQ::lua_zmqSendMultipart;
 
-	module["recvAll"] = LuaZMQ::lua_zmqRecvAll;
-	module["recvMultipart"] = LuaZMQ::lua_zmqRecvMultipart;
-	module["sendMultipart"] = LuaZMQ::lua_zmqSendMultipart;
+	luazmq_module["msgInit"] = LuaZMQ::lua_zmqMsgInit;
+	luazmq_module["msgClose"] = LuaZMQ::lua_zmqMsgClose;
+	luazmq_module["msgCopy"] = LuaZMQ::lua_zmqMsgCopy;
+	luazmq_module["msgMove"] = LuaZMQ::lua_zmqMsgMove;
+	luazmq_module["msgGetData"] = LuaZMQ::lua_zmqMsgGetData;
+	luazmq_module["msgSetData"] = LuaZMQ::lua_zmqMsgSetData;
+	luazmq_module["msgGet"] = LuaZMQ::lua_zmqMsgGet;
+	luazmq_module["msgSet"] = LuaZMQ::lua_zmqMsgSet;
+	luazmq_module["msgMore"] = LuaZMQ::lua_zmqMsgMore;
+	luazmq_module["msgSize"] = LuaZMQ::lua_zmqMsgSize;
+	luazmq_module["msgSend"] = LuaZMQ::lua_zmqMsgSend;
+	luazmq_module["msgRecv"] = LuaZMQ::lua_zmqMsgRecv;
 
-	module["msgInit"] = LuaZMQ::lua_zmqMsgInit;
-	module["msgClose"] = LuaZMQ::lua_zmqMsgClose;
-	module["msgCopy"] = LuaZMQ::lua_zmqMsgCopy;
-	module["msgMove"] = LuaZMQ::lua_zmqMsgMove;
-	module["msgGetData"] = LuaZMQ::lua_zmqMsgGetData;
-	module["msgSetData"] = LuaZMQ::lua_zmqMsgSetData;
-	module["msgGet"] = LuaZMQ::lua_zmqMsgGet;
-	module["msgSet"] = LuaZMQ::lua_zmqMsgSet;
-	module["msgMore"] = LuaZMQ::lua_zmqMsgMore;
-	module["msgSize"] = LuaZMQ::lua_zmqMsgSize;
-	module["msgSend"] = LuaZMQ::lua_zmqMsgSend;
-	module["msgRecv"] = LuaZMQ::lua_zmqMsgRecv;
+	luazmq_module["pollNew"] = LuaZMQ::lua_zmqPollNew;
+	luazmq_module["pollFree"] = LuaZMQ::lua_zmqPollFree;
+	luazmq_module["pollSize"] = LuaZMQ::lua_zmqPollSize;
+	luazmq_module["pollGet"] = LuaZMQ::lua_zmqPollGet;
+	luazmq_module["pollSet"] = LuaZMQ::lua_zmqPollSet;
+	luazmq_module["poll"] = LuaZMQ::lua_zmqPoll;
 
-	module["pollNew"] = LuaZMQ::lua_zmqPollNew;
-	module["pollFree"] = LuaZMQ::lua_zmqPollFree;
-	module["pollSize"] = LuaZMQ::lua_zmqPollSize;
-	module["pollGet"] = LuaZMQ::lua_zmqPollGet;
-	module["pollSet"] = LuaZMQ::lua_zmqPollSet;
-	module["poll"] = LuaZMQ::lua_zmqPoll;
-
-	module["proxy"] = LuaZMQ::lua_zmqProxy;
+	luazmq_module["proxy"] = LuaZMQ::lua_zmqProxy;
 #if (ZMQ_VERSION_MAJOR>=4) && (ZMQ_VERSION_MINOR>=0) && (ZMQ_VERSION_PATCH>=5)
-	module["proxySteerable"] = LuaZMQ::lua_zmqProxySteerable;
+	luazmq_module["proxySteerable"] = LuaZMQ::lua_zmqProxySteerable;
 #endif
 
-	module["sleep"] = LuaZMQ::lua_zmqSleep;
-	module["stopwatchStart"] = LuaZMQ::lua_zmqStopwatchStart;
-	module["stopwatchStop"] = LuaZMQ::lua_zmqStopwatchStop;
+	luazmq_module["sleep"] = LuaZMQ::lua_zmqSleep;
+	luazmq_module["stopwatchStart"] = LuaZMQ::lua_zmqStopwatchStart;
+	luazmq_module["stopwatchStop"] = LuaZMQ::lua_zmqStopwatchStop;
 
-	module["thread"] = LuaZMQ::lua_zmqThread;
-	module["joinThread"] = LuaZMQ::lua_zmqJoinThread;
-	module["freeThread"] = LuaZMQ::lua_zmqFreeThread;
-	module["getThreadResult"] = LuaZMQ::lua_zmqGetThreadResult;
+	luazmq_module["thread"] = LuaZMQ::lua_zmqThread;
+	luazmq_module["joinThread"] = LuaZMQ::lua_zmqJoinThread;
+	luazmq_module["freeThread"] = LuaZMQ::lua_zmqFreeThread;
+	luazmq_module["getThreadResult"] = LuaZMQ::lua_zmqGetThreadResult;
 
-	module["Z85Encode"] = LuaZMQ::lua_zmqZ85Encode;
-	module["Z85Decode"] = LuaZMQ::lua_zmqZ85Decode;
+	luazmq_module["Z85Encode"] = LuaZMQ::lua_zmqZ85Encode;
+	luazmq_module["Z85Decode"] = LuaZMQ::lua_zmqZ85Decode;
 
-	state.new_table();
-	lutok::registerLib(state, module);
+	state->registerLib(luazmq_module);
 	return 1;
 }
