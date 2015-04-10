@@ -306,7 +306,7 @@ M.context = function(context, io_threads, DEBUG)
 					end,
 					sendID = function(id)
 						assert(id)
-						zmq.sendMultipart(socket, {id, ''}, constants.ZMQ_SNDMORE)
+						return zmq.sendMultipart(socket, {id, ''}, constants.ZMQ_SNDMORE)
 					end,
 					close = function()
 						if not closed then
