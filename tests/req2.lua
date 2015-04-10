@@ -17,4 +17,4 @@ if len and len > 0 then
 	poll.start()
 
 end
-socket.diconnect()
+socket.disconnect()

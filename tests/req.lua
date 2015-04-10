@@ -11,4 +11,4 @@ local result = assert(socket.recvAll())
 
 print('Returned answer: ', result)
 
-socket.diconnect()
+socket.disconnect()

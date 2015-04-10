@@ -279,7 +279,7 @@ M.context = function(context, io_threads, DEBUG)
 					connect = function(endpoint)
 						return zmq.connect(socket, endpoint)
 					end,
-					diconnect = function(endpoint)
+					disconnect = function(endpoint)
 						return zmq.disconnect(socket, endpoint)
 					end,
 					bind = function(endpoint)
