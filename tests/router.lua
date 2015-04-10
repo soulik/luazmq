@@ -10,11 +10,6 @@ poll.add(socket, zmq.ZMQ_POLLIN, function(socket)
 	local name = assert(socket.recv(256))
 	print(string.format("Name: %q %s", name, zmq.tohex(name)))
 
-	if socket.more then
-		local d = assert(socket.recv(1))
-		print(string.format("Waiting for data...: %q %s", d, zmq.tohex(d)))
-	end
-
 	local result = assert(socket.recvAll())
 	print(string.format("Recieved data: %q from: %q", result, name))
 
