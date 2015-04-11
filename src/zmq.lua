@@ -65,6 +65,21 @@ local constants = {
     ZMQ_CONFLATE =				54,
     ZMQ_ZAP_DOMAIN =			55,
 
+	ZMQ_ROUTER_HANDOVER = 		56,
+	ZMQ_TOS =					57,
+	ZMQ_CONNECT_RID =			61,
+	ZMQ_GSSAPI_SERVER =			62,
+	ZMQ_GSSAPI_PRINCIPAL =		63,
+	ZMQ_GSSAPI_SERVICE_PRINCIPAL =	64,
+	ZMQ_GSSAPI_PLAINTEXT =		65,
+	ZMQ_HANDSHAKE_IVL =			66,
+	ZMQ_SOCKS_PROXY =			68,
+	ZMQ_XPUB_NODROP =			69,
+	ZMQ_BLOCKY =				70,
+	ZMQ_XPUB_MANUAL =			71,
+	ZMQ_XPUB_WELCOME_MSG =		72,
+	ZMQ_STREAM_NOTIFY =			73,
+
 	ZMQ_MORE =					1,
 
 	ZMQ_DONTWAIT =				1,
@@ -139,6 +154,20 @@ local socket_option_names = {
     ['REQ_RELAXED'] = 			constants.ZMQ_REQ_RELAXED,
     ['CONFLATE'] = 				constants.ZMQ_CONFLATE,
     ['ZAP_DOMAIN'] =			constants.ZMQ_ZAP_DOMAIN,
+    ['ROUTER_HANDOVER'] =		constants.ZMQ_ROUTER_HANDOVER,
+	['TOS'] =					constants.ZMQ_TOS,
+	['CONNECT_RID'] =			constants.ZMQ_CONNECT_RID,
+	['GSSAPI_SERVER'] =			constants.ZMQ_GSSAPI_SERVER,
+	['GSSAPI_PRINCIPAL'] =		constants.ZMQ_GSSAPI_PRINCIPAL,
+	['GSSAPI_SERVICE_PRINCIPAL'] =	constants.ZMQ_GSSAPI_SERVICE_PRINCIPAL,
+	['GSSAPI_PLAINTEXT'] =		constants.ZMQ_GSSAPI_PLAINTEXT,
+	['HANDSHAKE_IVL'] =			constants.ZMQ_HANSHAKE_IVL,
+	['SOCKS_PROXY'] =			constants.ZMQ_SOCKS_PROXY,
+	['XPUB_NODROP'] =			constants.ZMQ_XPUB_NODROP,
+	['BLOCKY'] =				constants.ZMQ_BLOCKY,
+	['XPUB_MANUAL'] =			constants.ZMQ_XPUB_MANUAL,
+	['XPUB_WELCOME_MSG'] =		constants.ZMQ_XPUB_WELCOME_MSG,
+	['STREAM_NOTIFY'] =			constants.ZMQ_STREAM_NOTIFY,
 }
 
 local socket_options = {
@@ -188,6 +217,20 @@ local socket_options = {
     [constants.ZMQ_REQ_RELAXED] =			'b',
     [constants.ZMQ_CONFLATE] =				'b',
     [constants.ZMQ_ZAP_DOMAIN] =			's',
+    [constants.ZMQ_ROUTER_HANDOVER] =		'b',
+	[constants.ZMQ_TOS] =					'i',
+	[constants.ZMQ_CONNECT_RID] =			's',
+	[constants.ZMQ_GSSAPI_SERVER] =			'b',
+	[constants.ZMQ_GSSAPI_PRINCIPAL] =		's',
+	[constants.ZMQ_GSSAPI_SERVICE_PRINCIPAL] =	's',
+	[constants.ZMQ_GSSAPI_PLAINTEXT] =		'b',
+	[constants.ZMQ_HANSHAKE_IVL] =			'i',
+	[constants.ZMQ_SOCKS_PROXY] =			's',
+	[constants.ZMQ_XPUB_NODROP] =			'b',
+	[constants.ZMQ_BLOCKY] =				'b',
+	[constants.ZMQ_XPUB_MANUAL] =			'b',
+	[constants.ZMQ_XPUB_WELCOME_MSG] =		'b',
+	[constants.ZMQ_STREAM_NOTIFY] =			'b',
 }
 
 local setupSocket
