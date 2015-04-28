@@ -255,7 +255,7 @@ namespace LuaZMQ {
 				lua_pushZMQ_error(state);
 				return 2;
 			}else{
-				stack->pushLString(v, size);
+				stack->pushLString(std::string(v, size));
 				return 1;
 			}
 		}
@@ -539,7 +539,7 @@ namespace LuaZMQ {
 					lua_pushZMQ_error(state);
 					return 2;
 				}else{
-					stack->pushLString(buffer, (result <= len) ? result : len);
+					stack->pushLString(std::string(buffer, (result <= len) ? result : len));
 					stack->push<int>(result);
 					return 2;
 				}
@@ -581,7 +581,7 @@ namespace LuaZMQ {
 				zmq_getsockopt(socket, ZMQ_RCVMORE, &more, &moreSize);
 			}
 
-			stack->pushLString(fullBuffer.c_str(), fullBuffer.size());
+			stack->pushLString(std::string(fullBuffer.c_str(), fullBuffer.size()));
 			return 1;
 		}
 		return 0;
@@ -623,7 +623,7 @@ namespace LuaZMQ {
 					if ((filledPartNum > 0) && (result == 0)){
 						//flush buffer
 						stack->push<int>(partNum++);
-						stack->pushLString(fullBuffer.c_str(), fullBuffer.length());
+						stack->pushLString(std::string(fullBuffer.c_str(), fullBuffer.length()));
 						stack->setTable();
 						fullBuffer.clear();
 						filledPartNum = 0;
@@ -638,7 +638,7 @@ namespace LuaZMQ {
 							if (bytesRead > MAX_BUFFER_SIZE){
 								//flush buffer
 								stack->push<int>(partNum++);
-								stack->pushLString(fullBuffer.c_str(), fullBuffer.length());
+								stack->pushLString(std::string(fullBuffer.c_str(), fullBuffer.length()));
 								stack->setTable();
 								fullBuffer.clear();
 								filledPartNum = 0;
@@ -651,7 +651,7 @@ namespace LuaZMQ {
 			}
 			if (partNum==1 && filledPartNum>0){
 				stack->push<int>(partNum);
-				stack->pushLString(fullBuffer.c_str(), fullBuffer.length());
+				stack->pushLString(std::string(fullBuffer.c_str(), fullBuffer.length()));
 				stack->setTable();
 			}
 			return 1;
@@ -854,7 +854,7 @@ namespace LuaZMQ {
 					lua_pushZMQ_error(state);
 				}else{
 					size_t size = zmq_msg_size(msg);
-					stack->pushLString(static_cast<char *>(result), size);
+					stack->pushLString(std::string(static_cast<char *>(result), size));
 					return 1;
 				}
 			}
@@ -1063,7 +1063,7 @@ namespace LuaZMQ {
 				size_t newLength = static_cast<unsigned int>(ceil(length*0.8));
 				char * buffer = new char[newLength];
 				if (zmq_z85_decode(reinterpret_cast<unsigned char*>(buffer), const_cast<char*>(data.c_str())) != NULL){
-					stack->pushLString(buffer, newLength);
+					stack->pushLString(std::string(buffer, newLength));
 				}else{
 					stack->push<bool>(false);
 				}
