@@ -701,6 +701,8 @@ M.ID = function(n)
 	return M.Z85_encode(string.char(unpack(t)))
 end
 
+M.has = zmq.has
+
 setmetatable(M, {
 	__index = constants,
 	__newindex = function(t, n, v)
