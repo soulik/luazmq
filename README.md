@@ -3,7 +3,7 @@ LuaZMQ
 
 ZeroMQ binding for Lua
 
-This binding relies on ZeroMQ 4.0.x+ C API!
+This binding relies on ZeroMQ 4.x.x+ C API! (Currently supports ZeroMQ 4.2 features)
 
 It's divided into low level C++ part and high level Lua part.
 Therefore there are two files luazmq.dll (luazmq.so) and zmq.lua.
@@ -67,6 +67,33 @@ poll.add(socket, zmq.ZMQ_POLLIN, function(socket)
 	socket.send(data)
 	print('Received: ', result, 'from: ', identity)
 end)
+
+while true do
+	poll.start()
+end
+
+socket.diconnect()
+```
+
+## The same rep part with polling as the previous sample with alternative method of poll initialization
+
+```lua
+local zmq = require 'zmq'
+
+local context = assert(zmq.context())
+local socket = assert(context.socket(zmq.ZMQ_REP))
+
+assert(socket.bind("tcp://*:12345"))
+
+local poll = zmq.poll {
+	{socket, zmq.ZMQ_POLLIN, function(socket)
+		local result = assert(socket.recvAll())
+		local identity = socket.options.identity
+		local data = "Hello: "..identity..". This is a reply to: "..result
+		socket.send(data)
+		print('Received: ', result, 'from: ', identity)
+	end},
+}
 
 while true do
 	poll.start()
@@ -187,6 +214,81 @@ end
 
 socket.close()
 ```
+
+## Simple ZeroMQ Web server
+
+```lua
+local zmq = require 'zmq'
+
+local context = assert(zmq.context())
+local socket = assert(context.socket(zmq.ZMQ_STREAM))
+socket.options.stream_notify = true
+socket.options.ipv6 = true
+assert(socket.bind("tcp://*:80"))
+
+local poll = zmq.poll {
+	{socket, zmq.ZMQ_POLLIN, function(socket)
+		local identity = socket.options.identity
+		local id = assert(socket.recv())
+		local data = assert(socket.recv())
+		if #data>0 then
+			assert(socket.send(id, zmq.ZMQ_SNDMORE))
+			assert(socket.send([[
+HTTP/1.0 200 OK
+Content-Type: text/plain
+
+Hello, World!]], zmq.ZMQ_SNDMORE))
+
+			assert(socket.send(id, zmq.ZMQ_SNDMORE))
+			assert(socket.send("", zmq.ZMQ_SNDMORE))
+		end
+	end},
+}
+
+while true do
+	poll.start()
+end
+socket.disconnect()
+```
+
+## Simple ZeroMQ Web client
+
+```lua
+local zmq = require 'zmq'
+
+local context = assert(zmq.context())
+local socket = assert(context.socket(zmq.ZMQ_STREAM))
+socket.options.stream_notify = true
+socket.options.ipv6 = true
+assert(socket.connect("tcp://www.google.com:80"))
+local identity = socket.options.identity
+local once = false
+
+local poll = zmq.poll {
+	{socket, zmq.ZMQ_POLLIN, function(socket)
+		local id = assert(socket.recv())
+		local data = assert(socket.recv())
+		if #data>0 then
+			print(("%q\n%q"):format(zmq.tohex(id), data))
+		end
+
+		if not once then
+			assert(socket.send(id, zmq.ZMQ_SNDMORE))
+			assert(socket.send([[
+GET / HTTP/1.1
+
+]], zmq.ZMQ_SNDMORE))
+			once = true
+		end
+	end},
+}
+
+while true do
+	poll.start()
+end
+socket.disconnect()
+```
+
 
 Authors
 =======
