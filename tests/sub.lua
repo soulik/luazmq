@@ -8,13 +8,13 @@ assert(socket.connect("tcp://localhost:12345"))
 local topic = 'demo'
 socket.options.subscribe = topic
 
-local poll = zmq.poll()
-	
-poll.add(socket, zmq.ZMQ_POLLIN, function(s)
-	local topic = assert(socket.recv())
-	local result = assert(socket.recvAll())
-	print(result)
-end)
+local poll = zmq.poll {
+	{socket, zmq.ZMQ_POLLIN, function(s)
+		local topic = assert(socket.recv())
+		local result = assert(socket.recvAll())
+		print(result)
+	end},
+}
 
 while (true) do
 	poll.start()

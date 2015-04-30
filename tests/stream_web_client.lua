@@ -6,25 +6,27 @@ local socket = assert(context.socket(zmq.ZMQ_STREAM))
 socket.options.stream_notify = true
 socket.options.ipv6 = true
 assert(socket.connect("tcp://www.google.com:80"))
-
-local poll = zmq.poll()
-
+local identity = socket.options.identity
 local once = false
 
-poll.add(socket, zmq.ZMQ_POLLIN, function(socket)
-	local identity = socket.options.identity
-	local id = assert(socket.recv())
-	local data = assert(socket.recv())
-	print("%q\n%q" % {zmq.tohex(id), data})
+local poll = zmq.poll {
+	{socket, zmq.ZMQ_POLLIN, function(socket)
+		local id = assert(socket.recv())
+		local data = assert(socket.recv())
+		if #data>0 then
+			print("%q\n%q" % {zmq.tohex(id), data})
+		end
 
-	if not once then
-		assert(socket.send(identity, zmq.ZMQ_SNDMORE))
-		assert(socket.send([[GET / HTTP/1.1
+		if not once then
+			assert(socket.send(id, zmq.ZMQ_SNDMORE))
+			assert(socket.send([[
+GET / HTTP/1.1
 
 ]], zmq.ZMQ_SNDMORE))
-		once = true
-	end
-end)
+			once = true
+		end
+	end},
+}
 
 while true do
 	poll.start()

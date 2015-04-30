@@ -7,15 +7,13 @@ assert(socket.connect("tcp://localhost:12345"))
 
 local len = assert(socket.send("Test message"))
 if len and len > 0 then
-	local poll = zmq.poll()
-	
-	poll.add(socket, zmq.ZMQ_POLLIN, function(socket)
-		assert(socket.recv(1))
-		result = assert(socket.recvAll())
-
-		print(result)
-	end)
-
+	local poll = zmq.poll {
+		{socket, zmq.ZMQ_POLLIN, function(socket)
+			assert(socket.recv(1))
+			result = assert(socket.recvAll())
+			print(result)
+		end},
+	}
 	poll.start()
 
 end

@@ -4,11 +4,11 @@ local context = assert(zmq.context())
 local socket = assert(context.socket(zmq.ZMQ_PUB))
 assert(socket.bind("tcp://*:12345"))
 
-local poll = zmq.poll()
-
-poll.add(socket, zmq.ZMQ_POLLOUT, function(socket)
-	assert(socket.sendMultipart({'demo', 'Hello everyone!'}))
-end)
+local poll = zmq.poll {
+	{socket, zmq.ZMQ_POLLOUT, function(socket)
+		assert(socket.sendMultipart({'demo', 'Hello everyone!'}))
+	end},
+}
 
 local lastTime = os.clock()
 while true do

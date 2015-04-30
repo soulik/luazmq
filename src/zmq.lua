@@ -224,7 +224,7 @@ local socket_options = {
 	[constants.ZMQ_GSSAPI_PRINCIPAL] =		's',
 	[constants.ZMQ_GSSAPI_SERVICE_PRINCIPAL] =	's',
 	[constants.ZMQ_GSSAPI_PLAINTEXT] =		'b',
-	[constants.ZMQ_HANSHAKE_IVL] =			'i',
+	[constants.ZMQ_HANDSHAKE_IVL] =			'i',
 	[constants.ZMQ_SOCKS_PROXY] =			's',
 	[constants.ZMQ_XPUB_NODROP] =			'b',
 	[constants.ZMQ_BLOCKY] =				'b',
@@ -548,7 +548,7 @@ M.stopwatch = function()
 	return stopwatch
 end
 
-M.poll = function()
+M.poll = function(initPollItems)
 	local poll = zmq.pollNew()
 	local pollItems = {}
 	setmetatable(pollItems, { __mode = 'k'})
@@ -629,6 +629,15 @@ M.poll = function()
 	end
 	mt.__gc = function()
 		zmq.pollFree(poll)
+	end
+
+	if type(initPollItems)=='table' then
+		for _, pollItem in pairs(initPollItems) do
+			if type(pollItem)=='table' then
+				local socket, pollType, fn = unpack(pollItem)
+				poll.add(socket, pollType, fn)
+			end
+		end
 	end
 	return poll
 end
