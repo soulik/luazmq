@@ -75,7 +75,8 @@ end
 socket.diconnect()
 ```
 
-## The same rep part with polling as the previous sample with alternative method of poll initialization
+## Rep part with polling
+### With alternative method of poll initialization
 
 ```lua
 local zmq = require 'zmq'
