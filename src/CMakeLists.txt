@@ -12,7 +12,7 @@ set(luazmq_version_script luazmq.version)
 
 IF(UNIX)
     IF(CMAKE_COMPILER_IS_GNUCC)
-         SET(CMAKE_SHARED_LINKER_FLAGS  "${CMAKE_SHARED_LINKER_FLAGS} ${CMAKE_CXX_COMPILE_OPTIONS_VISIBILITY}hidden -Wl,--version-script=${LuaBox2D_version_script}")
+         SET(CMAKE_SHARED_LINKER_FLAGS  "${CMAKE_SHARED_LINKER_FLAGS} ${CMAKE_CXX_COMPILE_OPTIONS_VISIBILITY}hidden -Wl,--version-script=${luazmq_version_script}")
     ENDIF(CMAKE_COMPILER_IS_GNUCC)
 
     SET(CMAKE_CXX_FLAGS "${CMAKE_CXX_FLAGS} -Wmissing-declarations")
