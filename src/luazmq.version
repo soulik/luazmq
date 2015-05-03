@@ -1,4 +1,4 @@
-LuaBox2D {
+luazmq {
 	global: luaopen_luazmq;
 	local: *;
 };
