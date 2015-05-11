@@ -1110,7 +1110,7 @@ namespace LuaZMQ {
 extern "C" LIBLUAZMQ_DLL_EXPORTED int luaopen_luazmq(lua_State * L){
 	State * state = new State(L);
 	Stack * stack = state->stack;
-	module luazmq_module;
+	Module luazmq_module;
 
 	stack->newTable();
 	
