@@ -45,7 +45,7 @@ using namespace lutok2;
 #define LIBLUAZMQ_DLL_EXPORTED
 #endif
 
-#ifdef _MSC_VER
+#ifndef _MSC_VER
 
 #define _alloca	alloca
 
