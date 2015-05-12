@@ -126,7 +126,7 @@ namespace LuaZMQ {
 			threadData * luaThread = new threadData;
 
 			luaThread->thread = std::thread([&](const std::string & code, void * zmqObj, std::string & result){
-				lutok2::State & thread_state = lutok2::State();
+				lutok2::State thread_state = lutok2::State();
 				thread_state.openLibs();
 				try{
 					thread_state.loadString(code);
