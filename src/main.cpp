@@ -90,6 +90,25 @@ namespace LuaZMQ {
 		return 0;
 	}
 
+#ifdef ZMQ_HAS_CAPABILITIES
+	int lua_zmqHas(lutok2::State & state){
+		Stack * stack = state.stack;
+		if (stack->is<LUA_TSTRING>(1)){
+			const std::string capability = stack->to<const std::string>(1);
+
+			stack->push<bool>(zmq_has(capability.c_str()) == 1);
+			return 1;
+		}
+		else{
+			return 0;
+		}
+	}
+#else
+	int lua_zmqHas(lutok2::State & state){
+		return 0;
+	}
+#endif
+
 	int lua_zmqThread(lutok2::State & state){
 		Stack * stack = state.stack;
 		int parameters_count = stack->getTop();
@@ -104,7 +123,7 @@ namespace LuaZMQ {
 
 			threadData * luaThread = new threadData;
 
-			luaThread->thread = std::thread([&](std::string & code, void * zmqObj, std::string & result){
+			luaThread->thread = std::thread([&](const std::string & code, void * zmqObj, std::string & result){
 				lutok2::State & thread_state = lutok2::State();
 				thread_state.openLibs();
 				try{
@@ -1118,6 +1137,7 @@ extern "C" LIBLUAZMQ_DLL_EXPORTED int luaopen_luazmq(lua_State * L){
 	luazmq_module["version"] = LuaZMQ::lua_zmqVersion;
 	luazmq_module["init"] = LuaZMQ::lua_zmqInit;
 	luazmq_module["term"] = LuaZMQ::lua_zmqTerm;
+	luazmq_module["has"] = LuaZMQ::lua_zmqHas;
 
 	luazmq_module["socket"] = LuaZMQ::lua_zmqSocket;
 	luazmq_module["close"] = LuaZMQ::lua_zmqClose;
