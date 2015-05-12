@@ -1,6 +1,9 @@
-﻿*.swp
+*.swp
 *.sdf
 *.suo
 *.opensdf
 *.user
+*.so
+*.so.*
 build/*
+tests/zmq.lua

@@ -1,6 +1,6 @@
-﻿local req = [[
+local req = [[
 	local name = unpack(arg)
-
+	
 	local socket,msg = assert(context.socket(zmq.ZMQ_REQ))
 	local result, msg = assert(socket.connect("inproc://test1"))
 	local poll = zmq.poll {

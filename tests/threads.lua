@@ -1,4 +1,4 @@
-﻿local req = [[
+local req = [[
 	local name = "Thread 1"
 
 	local socket,msg = assert(context.socket(zmq.ZMQ_REQ))

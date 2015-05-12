@@ -30,6 +30,8 @@
 #include "common.h"
 #include <thread>
 #include <vector>
+#include <math.h>
+#include <memory.h>
 
 namespace LuaZMQ {
 	struct pollArray_t {
@@ -104,8 +106,8 @@ namespace LuaZMQ {
 
 			threadData * luaThread = new threadData;
 
-			luaThread->thread = std::thread([&](std::string & code, void * zmqObj, std::string & result){
-				lutok2::State & thread_state = lutok2::State();
+			luaThread->thread = std::thread([&](const std::string & code, void * zmqObj, std::string & result){
+				lutok2::State thread_state = lutok2::State();
 				thread_state.openLibs();
 				try{
 					thread_state.loadString(code);
@@ -123,6 +125,7 @@ namespace LuaZMQ {
 					}
 				}
 			}, code, zmqObj, std::ref(luaThread->result));
+			
 			pushUData(luaThread);
 			return 1;
 		}else{
@@ -323,7 +326,7 @@ namespace LuaZMQ {
 			pollArray_t * poll = static_cast<pollArray_t *>(getZMQobject(1));
 			if (poll){
 				size_t index = stack->to<int>(2);
-				if ((index>=0) && (index<poll->items.size())){
+				if (index<poll->items.size()){
 					zmq_pollitem_t & item = poll->items[index];
 					stack->newTable();
 						stack->pushLiteral("socket");
@@ -347,7 +350,7 @@ namespace LuaZMQ {
 			if (poll){
 				if (stack->is<LUA_TNUMBER>(2) && stack->is<LUA_TTABLE>(3)){
 					size_t index = stack->to<int>(2);
-					if ((index>=0) && (index<poll->items.size())){
+					if (index<poll->items.size()){
 						zmq_pollitem_t & item = poll->items[index];
 
 						stack->getField("socket", 3);
@@ -692,7 +695,7 @@ namespace LuaZMQ {
 	int lua_zmqSend(lutok2::State & state){
 		Stack * stack = state.stack;
 		if (stack->is<LUA_TUSERDATA>(1) && stack->is<LUA_TSTRING>(2)){
-			std::string & buffer = stack->toLString(2);
+			const std::string buffer = stack->toLString(2);
 			size_t len = buffer.length();
 			int flags = 0;
 			if (stack->is<LUA_TNUMBER>(3)){
@@ -748,7 +751,7 @@ namespace LuaZMQ {
 				stack->getTable(2);
 
 				if (stack->is<LUA_TSTRING>()){
-					std::string & buffer = stack->toLString();
+					const std::string buffer = stack->toLString();
 					size_t len = buffer.length();
 					size_t offset = 0;
 					const char * inputBuffer = buffer.c_str();
@@ -904,7 +907,7 @@ namespace LuaZMQ {
 					lua_pushZMQ_error(state);
 				}else{
 					size_t dest_size = zmq_msg_size(msg);
-					std::string & src = stack->toLString(2);
+					const std::string src = stack->toLString(2);
 					size_t src_size = src.length();
 
 					if (src_size <= dest_size){
