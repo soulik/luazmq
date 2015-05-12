@@ -29,7 +29,7 @@
 
 #include "common.h"
 #include <thread>
-#icnlude <vector>
+#include <vector>
 
 namespace LuaZMQ {
 	struct pollArray_t {
