@@ -1,4 +1,4 @@
-﻿local zmq = require 'zmq'
+local zmq = require 'zmq'
 
 local CHUNK_SIZE = 25000
 

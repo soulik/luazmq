@@ -1,4 +1,4 @@
-﻿local zmq = require 'luazmq'
+local zmq = require 'luazmq'
 
 print('A list of supported capabilities:')
 

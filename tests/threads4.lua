@@ -1,4 +1,4 @@
-﻿local req = [[
+local req = [[
 	local name = unpack(arg)
 
 	local socket,msg = assert(context.socket(zmq.ZMQ_REQ))

@@ -1,4 +1,4 @@
-﻿local zmq = require 'zmq'
+local zmq = require 'zmq'
 require 'utils/pstring'
 
 local context = assert(zmq.context())

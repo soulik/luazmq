@@ -1,4 +1,4 @@
-﻿local zmq = require 'zmq'
+local zmq = require 'zmq'
 
 local context = assert(zmq.context())
 local socket = assert(context.socket(zmq.ZMQ_ROUTER))
