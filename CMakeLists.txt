@@ -18,7 +18,6 @@ set_target_properties(libzmq
 
 include(FindLua51)
 include_directories(SYSTEM ${LUA_INCLUDE_DIR})
-include_directories(dependencies/lua/include)
 
 include_directories(dependencies/lutok2/include)
 

@@ -30,8 +30,6 @@
 #include <zmq.h>
 #include <zmq_utils.h>
 
-#include <lua/lua.hpp>
-
 #include <lutok2/lutok2.hpp>
 using namespace lutok2;
 
