@@ -25,9 +25,98 @@
 	THEORY OF LIABILITY, WHETHER IN CONTRACT, STRICT LIABILITY, OR TORT
 	(INCLUDING NEGLIGENCE OR OTHERWISE) ARISING IN ANY WAY OUT OF THE USE
 	OF THIS SOFTWARE, EVEN IF ADVISED OF THE POSSIBILITY OF SUCH DAMAGE.
+
+
+	This module uses portion of NumberLua module to offer bitwise AND operation in a case where there's no library for bitwise operations available.
+	(Namely: Lua 5.1 and older versions)
+	
+	https://github.com/davidm/lua-bit-numberlua
+
+	(c) 2008-2011 David Manura.  Licensed under the same terms as Lua (MIT).
+
+	Permission is hereby granted, free of charge, to any person obtaining a copy
+	of this software and associated documentation files (the "Software"), to deal
+	in the Software without restriction, including without limitation the rights
+	to use, copy, modify, merge, publish, distribute, sublicense, and/or sell
+	copies of the Software, and to permit persons to whom the Software is
+	furnished to do so, subject to the following conditions:
+
+	The above copyright notice and this permission notice shall be included in
+	all copies or substantial portions of the Software.
+
+	THE SOFTWARE IS PROVIDED "AS IS", WITHOUT WARRANTY OF ANY KIND, EXPRESS OR
+	IMPLIED, INCLUDING BUT NOT LIMITED TO THE WARRANTIES OF MERCHANTABILITY,
+	FITNESS FOR A PARTICULAR PURPOSE AND NONINFRINGEMENT.  IN NO EVENT SHALL THE
+	AUTHORS OR COPYRIGHT HOLDERS BE LIABLE FOR ANY CLAIM, DAMAGES OR OTHER
+	LIABILITY, WHETHER IN AN ACTION OF CONTRACT, TORT OR OTHERWISE, ARISING FROM,
+	OUT OF OR IN CONNECTION WITH THE SOFTWARE OR THE USE OR OTHER DEALINGS IN
+	THE SOFTWARE.
+	(end license)
+
 --]]
 
+local function tryRequire(moduleName)
+	local status, M = pcall(require, moduleName)
+	if not status then
+		return nil, M
+	else
+		return M
+	end
+end
+
 local zmq = require 'luazmq'
+
+local bit = tryRequire('bit') or tryRequire('bit32')
+local band
+
+if type(bit)=='table' then
+	band = bit.band
+else
+	local floor = math.floor
+
+	local MOD = 2^32
+	local MODM = MOD-1
+
+	local function memoize(f)
+		local mt = {}
+		local t = setmetatable({}, mt)
+		function mt:__index(k)
+			local v = f(k); t[k] = v
+			return v
+		end
+		return t
+	end
+
+	local function make_bitop_uncached(t, m)
+		local function bitop(a, b)
+			local res,p = 0,1
+			while a ~= 0 and b ~= 0 do
+				local am, bm = a%m, b%m
+				res = res + t[am][bm]*p
+				a = (a - am) / m
+				b = (b - bm) / m
+				p = p*m
+			end
+			res = res + (a+b)*p
+			return res
+		end
+		return bitop
+	end
+
+	local function make_bitop(t)
+		local op1 = make_bitop_uncached(t,2^1)
+		local op2 = memoize(function(a)
+			return memoize(function(b)
+				return op1(a, b)
+			end)
+		end)
+		return make_bitop_uncached(op2, 2^(t.n or 1))
+	end
+
+	local bxor = make_bitop {[0]={[0]=0,[1]=1},[1]={[0]=1,[1]=0}, n=4}
+	band = function(a,b) return ((a+b) - bxor(a,b))/2 end
+end
+
 local M = {}
 
 local constants = {
@@ -627,7 +716,7 @@ M.poll = function(initPollItems)
 						assert(s, 'Invalid socket')
 						local pollItem = pollItems[rawSocket]
 						if pollItem then
-							if bit.band(v.revents, pollItem[1]) > 0 then
+							if band(v.revents, pollItem[1]) > 0 then
 								local flags = pollItem[1]
 								local fn = pollItem[2]
 								if type(fn) == "function" then
