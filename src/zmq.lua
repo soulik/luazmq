@@ -1,4 +1,4 @@
-﻿--[[
+--[[
 	LuaZMQ - Lua binding for ZeroMQ library
 
 	Copyright 2013, 2014, 2015 Mário Kašuba

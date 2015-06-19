@@ -32,7 +32,7 @@ set_target_properties(luazmq
     RUNTIME_OUTPUT_DIRECTORY "${CMAKE_BINARY_DIR}/bin"
 )
 
-configure_file(zmq.lua zmq.lua COPYONLY)
+configure_file(zmq.lua ${CMAKE_BINARY_DIR}/lib/zmq.lua COPYONLY)
 
 target_link_libraries (luazmq
 	libzmq
