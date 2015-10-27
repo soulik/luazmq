@@ -4,3 +4,6 @@
 [submodule "dependencies/lutok2"]
 	path = dependencies/lutok2
 	url = https://github.com/soulik/lutok2.git
+[submodule "dependencies/libsodium"]
+	path = dependencies/libsodium
+	url = https://github.com/jedisct1/libsodium.git

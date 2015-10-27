@@ -135,6 +135,9 @@ local constants = {
 
     ZMQ_XREQ = 					5, --ZMQ_DEALER
     ZMQ_XREP = 					6, --ZMQ_ROUTER
+
+    ZMQ_SERVER =				12,
+    ZMQ_CLIENT =				13,
                        	
     ZMQ_AFFINITY =				4,
     ZMQ_IDENTITY =				5,
@@ -197,8 +200,18 @@ local constants = {
 	ZMQ_XPUB_MANUAL =			71,
 	ZMQ_XPUB_WELCOME_MSG =		72,
 	ZMQ_STREAM_NOTIFY =			73,
+	ZMQ_INVERT_MATCHING = 		74,
+	ZMQ_HEARTBEAT_IVL = 		75,
+	ZMQ_HEARTBEAT_TTL = 		76,
+	ZMQ_HEARTBEAT_TIMEOUT = 	77,
+	ZMQ_XPUB_VERBOSE_UNSUBSCRIBE = 	78,
+	ZMQ_CONNECT_TIMEOUT = 		79,
+	ZMQ_TCP_RETRANSMIT_TIMEOUT =	80,
+	ZMQ_THREAD_SAFE = 			81,
 
 	ZMQ_MORE =					1,
+	ZMQ_SRCFD = 				2,
+	ZMQ_SHARED = 				3,
 
 	ZMQ_DONTWAIT =				1,
 	ZMQ_SNDMORE =				2,
@@ -206,6 +219,7 @@ local constants = {
 	ZMQ_NULL =					0,
 	ZMQ_PLAIN =					1,
 	ZMQ_CURVE =					2,
+	ZMQ_GSSAPI = 				3,
 
 	ZMQ_EVENT_CONNECTED =		1,
 	ZMQ_EVENT_CONNECT_DELAYED =	2,
@@ -223,6 +237,18 @@ local constants = {
 	ZMQ_POLLIN =				1,
 	ZMQ_POLLOUT =				2,
 	ZMQ_POLLERR =				4,
+	ZMQ_POLLPRI =				8,
+
+	ZMQ_IO_THREADS = 			1,
+	ZMQ_MAX_SOCKETS = 			2,
+	ZMQ_SOCKET_LIMIT = 			3,
+	ZMQ_THREAD_PRIORITY = 		3,
+	ZMQ_THREAD_SCHED_POLICY = 	4,
+
+	ZMQ_IO_THREADS_DFLT = 		1,
+	ZMQ_MAX_SOCKETS_DFLT = 		1023,
+	ZMQ_THREAD_PRIORITY_DFLT = 	-1,
+	ZMQ_THREAD_SCHED_POLICY_DFLT = -1,
 }
 
 local socket_option_names = {
@@ -289,7 +315,7 @@ local socket_option_names = {
 }
 
 local socket_options = {
-    [constants.ZMQ_AFFINITY] =				'i',
+    [constants.ZMQ_AFFINITY] =				'i64',
     [constants.ZMQ_IDENTITY] =				's',
     [constants.ZMQ_SUBSCRIBE] =				's',
     [constants.ZMQ_UNSUBSCRIBE] =			's',
@@ -298,14 +324,14 @@ local socket_options = {
     [constants.ZMQ_SNDBUF] =				'i',
     [constants.ZMQ_RCVBUF] =				'i',
     [constants.ZMQ_RCVMORE] =				'b',
-    [constants.ZMQ_FD] =					'i',
+    [constants.ZMQ_FD] =					'iptr',
     [constants.ZMQ_EVENTS] =				'i',
     [constants.ZMQ_TYPE] =					'i',
     [constants.ZMQ_LINGER] =				'i',
     [constants.ZMQ_RECONNECT_IVL] =			'i',
     [constants.ZMQ_BACKLOG] =				'i',
     [constants.ZMQ_RECONNECT_IVL_MAX] =		'i',
-    [constants.ZMQ_MAXMSGSIZE] =			'i',
+    [constants.ZMQ_MAXMSGSIZE] =			'i64',
     [constants.ZMQ_SNDHWM] =				'i',
     [constants.ZMQ_RCVHWM] =				'i',
     [constants.ZMQ_MULTICAST_HOPS] =		'i',
@@ -374,10 +400,35 @@ M.context = function(context, io_threads, DEBUG)
 	local options = {}
 	setmetatable(options, {
 		__index = function(t, name)
-			return zmq.get(context, name)
+		    local optionID
+			if type(name)=='string' then
+				optionID = socket_option_names[name:upper()]
+				assert(optionID, 'Unknown option')
+			elseif type(name)=='number' then
+			    optionID = name
+			else
+				error('Unknown option')
+			end
+			return zmq.get(context, optionID)
 		end,
 		__newindex = function(t, name, value)
-			zmq.set(context, name, value)
+		    local optionID
+			if type(name)=='string' then
+				optionID = socket_option_names[name:upper()]
+				assert(optionID, 'Unknown option')
+			elseif type(name)=='number' then
+			    optionID = name
+			else
+				error('Unknown option')
+			end
+
+			local optionValue
+			if type(value)=='boolean' then
+				optionValue = value and 1 or 0
+			else
+				optionValue = tonumber(value)
+			end
+			zmq.set(context, optionID, optionValue)
 		end,
 	})
 
@@ -404,12 +455,16 @@ M.context = function(context, io_threads, DEBUG)
 
 						local _type = socket_options[index]
 						if _type then
-							if _type == 'i' then
-								return assert(zmq.socketGetOptionI(socket, index))
+							if _type == 'i32' or _type=='i' then
+								return assert(zmq.socketGetOptionI32(socket, index))
+							elseif _type == 'i64' then
+								return assert(zmq.socketGetOptionI64(socket, index))
+							elseif _type == 'iptr' then
+								return assert(zmq.socketGetOptionIptr(socket, index))
 							elseif _type == 's' then
 								return assert(zmq.socketGetOptionS(socket, index))
 							elseif _type == 'b' then
-								return assert(zmq.socketGetOptionI(socket, index) == 1)
+								return assert(zmq.socketGetOptionI32(socket, index) == 1)
 							else
 								error('Unknown socket option')
 							end
@@ -425,12 +480,16 @@ M.context = function(context, io_threads, DEBUG)
 
 						local _type = socket_options[index]
 						if _type then
-							if _type == 'i' then
-								return assert(zmq.socketSetOption(socket, index, tonumber(value)))
+							if _type == 'i32' or _type == 'i' then
+								return assert(zmq.socketSetOptionI32(socket, index, tonumber(value)))
+							elseif _type == 'i64' then
+								return assert(zmq.socketSetOptionI64(socket, index, tonumber(value)))
+							elseif _type == 'iptr' then
+								return assert(zmq.socketSetOptionIptr(socket, index, tonumber(value)))
 							elseif _type == 's' then
-								return assert(zmq.socketSetOption(socket, index, tostring(value)))
+								return assert(zmq.socketSetOptionS(socket, index, tostring(value)))
 							elseif _type == 'b' then
-								return assert(zmq.socketSetOption(socket, index, (value and 1) or 0))
+								return assert(zmq.socketSetOptionI32(socket, index, (value and 1) or 0))
 							end
 						end
 					end,
@@ -460,7 +519,7 @@ M.context = function(context, io_threads, DEBUG)
 						return zmq.send(socket, str, flags)
 					end,
 					recvMultipart = function(bufferLength)
-						return zmq.recvMultipart(socket, flags, bufferLengthor or DEFAULT_BUFFER_SIZE)
+						return zmq.recvMultipart(socket, flags, bufferLength or DEFAULT_BUFFER_SIZE)
 					end,
 					sendMultipart = function(t, flags, bufferLength)
 						return zmq.sendMultipart(socket, t, flags, bufferLength or DEFAULT_BUFFER_SIZE)
@@ -536,6 +595,9 @@ M.context = function(context, io_threads, DEBUG)
 							end
 						end
 						mt.__gc = function()
+							if DEBUG then
+								print('Closing msg object')
+							end
 							zmq.msgClose(zmsg)
 						end
 
@@ -547,7 +609,7 @@ M.context = function(context, io_threads, DEBUG)
 				local mt = getmetatable(socket)
 				mt.__index = function(t, fn)
 					if fn == "more" then
-						local more = zmq.socketGetOptionI(socket, constants.ZMQ_RCVMORE)
+						local more = zmq.socketGetOptionI32(socket, constants.ZMQ_RCVMORE)
 						return (more == 1)
 					else
 						return lfn[fn]
@@ -556,6 +618,9 @@ M.context = function(context, io_threads, DEBUG)
 				mt.__newindex = function()
 				end
 				mt.__gc = function()
+					if DEBUG then
+						print('Closing socket')
+					end
 					lfn.close()
 				end
 				return socket
@@ -631,6 +696,9 @@ local arg = {]]}
 	end
 	mt.__gc = function()
 		if contextOwner then
+			if DEBUG then
+				print('Closing context')
+			end
 			zmq.term(context)
 		end
 	end
@@ -706,7 +774,8 @@ M.poll = function(initPollItems)
 	local lfn = {
 		items = items,
 		start = function(timeout)
-			if assert(zmq.poll(poll, timeout)) > 0 then
+			local signaledItems = assert(zmq.poll(poll, timeout))
+			if signaledItems > 0 then
 				local size = zmq.pollSize(poll)
 				for i=0,size-1 do
 					local v = zmq.pollGet(poll, i) 
@@ -714,13 +783,14 @@ M.poll = function(initPollItems)
 						local rawSocket = getRawSocket(v.socket)
 						local s = socketCache[rawSocket]
 						assert(s, 'Invalid socket')
-						local pollItem = pollItems[rawSocket]
+						local pollItem = pollItems[i+1]
+
 						if pollItem then
 							if band(v.revents, pollItem[1]) > 0 then
 								local flags = pollItem[1]
 								local fn = pollItem[2]
 								if type(fn) == "function" then
-									fn(s)
+									fn(s, v.revents)
 								end
 							end
 						end
@@ -730,13 +800,15 @@ M.poll = function(initPollItems)
 		end,
 		add = function(s, flags, fn)
 			local rawSocket = getRawSocket(s)
-			pollItems[rawSocket] = {flags, fn}
+			
+			table.insert(pollItems, {flags, fn})
+
 			if not socketCache[rawSocket] then
 				socketCache[rawSocket] = s
 			end
 
 			zmq.pollSet(poll,
-				{socket = s, fd = 0, events = flags, revents = 0}
+				{socket = s, fd = s.options.FD, events = flags, revents = 0}
 			)
 		end,
 	}
@@ -760,6 +832,38 @@ M.poll = function(initPollItems)
 	return poll
 end
 
+M.atomic = function()
+    local counter = zmq.atomicCounterNew()
+
+    local lfn = {
+    	inc = function()
+    		return zmq.atomicCounterInc(counter)
+    	end,
+    	dec = function()
+    		return zmq.atomicCounterDec(counter)
+    	end,
+    }
+
+	local mt = getmetatable(counter)
+	mt.__index = function(t, fn)
+		if fn=='value' then
+			return zmq.atomicCounterValue(counter)
+		else
+			return lfn[fn]
+		end
+	end
+	mt.__newindex = function(t, fn, v)
+		if fn=='value' then
+			assert(type(v)=='number')
+			return zmq.atomicCounterSet(counter, v)
+		end		
+	end
+	mt.__gc = function()
+		zmq.atomicCounterDestroy(counter)
+	end
+	return counter
+end
+
 M.proxy = function(forward, backend, capture)
 	zmq.proxy(forward, backend, capture)
 end
@@ -772,12 +876,12 @@ M.Z85_decode = function(str)
 	return zmq.Z85Decode(str)
 end
 
-M.tohex = function(s)
+M.tohex = function(s, sep)
 	local t = {}
 	for i=1,#s do
 		table.insert(t, string.format("%02X", string.byte(s, i)))
 	end
-	return table.concat(t)
+	return table.concat(t, sep)
 end
 
 M.ID = function(n)

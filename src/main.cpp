@@ -32,6 +32,7 @@
 #include <vector>
 #include <math.h>
 #include <memory.h>
+#include <stdint.h>
 
 namespace LuaZMQ {
 	struct pollArray_t {
@@ -246,22 +247,14 @@ namespace LuaZMQ {
 		return 0;
 	}
 
-	int lua_zmqSetSockOpt(lutok2::State & state){
+	int lua_zmqSetSockOptS(lutok2::State & state){
 		Stack * stack = state.stack;
-		if (stack->is<LUA_TUSERDATA>(1) && stack->is<LUA_TNUMBER>(2)){
-			const void * value = nullptr;
-			std::string str;
-			size_t size = 0;
+		if (stack->is<LUA_TUSERDATA>(1) && stack->is<LUA_TNUMBER>(2) && stack->is<LUA_TSTRING>(3)){
 			int option = stack->to<int>(2);
-			if (stack->is<LUA_TNUMBER>(3)){
-				int v = stack->to<int>(3);
-				value = static_cast<const void *>(&v);
-				size = sizeof(v);
-			}else if (stack->is<LUA_TSTRING>(3)){
-				str = stack->to<const std::string>();
-				value = const_cast<const char *>(str.c_str());
-				size = str.length();
-			}
+			const std::string str = stack->toLString(3);
+			const void * value = const_cast<const char *>(str.c_str());
+			size_t size = str.length();
+
 			int result = zmq_setsockopt(getZMQobject(1), option, value, size);
 			if (result == -1){
 				stack->push<bool>(false);
@@ -275,10 +268,79 @@ namespace LuaZMQ {
 		return 0;
 	}
 
-	int lua_zmqGetSockOptI(lutok2::State & state){
+	int lua_zmqSetSockOptI32(lutok2::State & state){
+		Stack * stack = state.stack;
+		if (stack->is<LUA_TUSERDATA>(1) && stack->is<LUA_TNUMBER>(2) && stack->is<LUA_TNUMBER>(3)){
+			int option = stack->to<int>(2);
+			
+			int32_t v = stack->to<int>(3);
+			const void * value = static_cast<const void *>(&v);
+			size_t size = sizeof(v);
+			
+			int result = zmq_setsockopt(getZMQobject(1), option, value, size);
+			if (result == -1){
+				stack->push<bool>(false);
+				lua_pushZMQ_error(state);
+				return 2;
+			}
+			else{
+				stack->push<bool>(true);
+				return 1;
+			}
+		}
+		return 0;
+	}
+
+	int lua_zmqSetSockOptI64(lutok2::State & state){
+		Stack * stack = state.stack;
+		if (stack->is<LUA_TUSERDATA>(1) && stack->is<LUA_TNUMBER>(2) && stack->is<LUA_TNUMBER>(3)){
+			int option = stack->to<int>(2);
+
+			int64_t v = stack->to<int>(3);
+			const void * value = static_cast<const void *>(&v);
+			size_t size = sizeof(v);
+
+			int result = zmq_setsockopt(getZMQobject(1), option, value, size);
+			if (result == -1){
+				stack->push<bool>(false);
+				lua_pushZMQ_error(state);
+				return 2;
+			}
+			else{
+				stack->push<bool>(true);
+				return 1;
+			}
+		}
+		return 0;
+	}
+
+	int lua_zmqSetSockOptIptr(lutok2::State & state){
+		Stack * stack = state.stack;
+		if (stack->is<LUA_TUSERDATA>(1) && stack->is<LUA_TNUMBER>(2) && stack->is<LUA_TNUMBER>(3)){
+			int option = stack->to<int>(2);
+
+			intptr_t v = stack->to<int>(3);
+			const void * value = static_cast<const void *>(&v);
+			size_t size = sizeof(v);
+
+			int result = zmq_setsockopt(getZMQobject(1), option, value, size);
+			if (result == -1){
+				stack->push<bool>(false);
+				lua_pushZMQ_error(state);
+				return 2;
+			}
+			else{
+				stack->push<bool>(true);
+				return 1;
+			}
+		}
+		return 0;
+	}
+
+	int lua_zmqGetSockOptI32(lutok2::State & state){
 		Stack * stack = state.stack;
 		if (stack->is<LUA_TUSERDATA>(1) && stack->is<LUA_TNUMBER>(2)){
-			int v = 0;
+			int32_t v = 0;
 			void * value = &v;
 			size_t size = sizeof(v);
 			int option = stack->to<int>(2);
@@ -294,10 +356,53 @@ namespace LuaZMQ {
 		}
 		return 0;
 	}
+
+	int lua_zmqGetSockOptI64(lutok2::State & state){
+		Stack * stack = state.stack;
+		if (stack->is<LUA_TUSERDATA>(1) && stack->is<LUA_TNUMBER>(2)){
+			int64_t v = 0;
+			void * value = &v;
+			size_t size = sizeof(v);
+			int option = stack->to<int>(2);
+
+			if (zmq_getsockopt(getZMQobject(1), option, value, &size) == -1){
+				stack->push<bool>(false);
+				lua_pushZMQ_error(state);
+				return 2;
+			}
+			else{
+				stack->push<LUA_NUMBER>(v);
+				return 1;
+			}
+		}
+		return 0;
+	}
+
+	int lua_zmqGetSockOptIptr(lutok2::State & state){
+		Stack * stack = state.stack;
+		if (stack->is<LUA_TUSERDATA>(1) && stack->is<LUA_TNUMBER>(2)){
+			intptr_t v = 0;
+			void * value = &v;
+			size_t size = sizeof(v);
+			int option =stack->to<int>(2);
+
+			if (zmq_getsockopt(getZMQobject(1), option, value, &size) == -1){
+				stack->push<bool>(false);
+				lua_pushZMQ_error(state);
+				return 2;
+			}
+			else{
+				stack->push<LUA_NUMBER>(v);
+				return 1;
+			}
+		}
+		return 0;
+	}
+
 	int lua_zmqGetSockOptS(lutok2::State & state){
 		Stack * stack = state.stack;
 		if (stack->is<LUA_TUSERDATA>(1) && stack->is<LUA_TNUMBER>(2)){
-			char v[1024];
+			char v[4096];
 			void * value = v;
 			size_t size = sizeof(v);
 			int option = stack->to<int>(2);
@@ -348,11 +453,11 @@ namespace LuaZMQ {
 				if (index<poll->items.size()){
 					zmq_pollitem_t & item = poll->items[index];
 					stack->newTable();
-						stack->pushLiteral("socket");
+						stack->push<const std::string &>("socket");
 						pushSocket(item.socket);
 						stack->setTable();
 
-						stack->setField<int>("fd", static_cast<int>(item.fd));
+						stack->setField<LUA_NUMBER>("fd", static_cast<intptr_t>(item.fd));
 						stack->setField<int>("events", static_cast<int>(item.events));
 						stack->setField<int>("revents", static_cast<int>(item.revents));
 					return 1;
@@ -380,7 +485,7 @@ namespace LuaZMQ {
 
 						stack->getField("fd", 3);
 						if (stack->is<LUA_TNUMBER>(-1)){
-							item.fd = stack->to<int>(-1);
+							item.fd = static_cast<intptr_t>(stack->to<LUA_NUMBER>(-1));
 						}
 						stack->pop(1);
 
@@ -410,7 +515,7 @@ namespace LuaZMQ {
 
 					stack->getField("fd", 2);
 					if (stack->is<LUA_TNUMBER>(-1)){
-						item.fd = stack->to<int>(-1);
+						item.fd = static_cast<intptr_t>(stack->to<LUA_NUMBER>(-1));
 					}
 					stack->pop(1);
 
@@ -1128,6 +1233,66 @@ namespace LuaZMQ {
 		return 0;
 	}
 
+	int lua_zmqAtomicCounterNew(lutok2::State & state){
+		Stack * stack = state.stack;
+		void * counter = zmq_atomic_counter_new();
+		if (counter){
+			pushUData(counter);
+			return 1;
+		}
+		else{
+			return 0;
+		}
+	}
+
+	int lua_zmqAtomicCounterDestroy(lutok2::State & state){
+		Stack * stack = state.stack;
+		if (stack->is<LUA_TUSERDATA>(1)){
+			void * counter = getZMQobject(1);
+			zmq_atomic_counter_destroy(&counter);
+		}
+		return 0;
+	}
+
+	int lua_zmqAtomicCounterSet(lutok2::State & state){
+		Stack * stack = state.stack;
+		if (stack->is<LUA_TUSERDATA>(1) && stack->is<LUA_TNUMBER>(2)){
+			void * counter = getZMQobject(1);
+			zmq_atomic_counter_set(counter, stack->to<int>(2));
+		}
+		return 0;
+	}
+
+	int lua_zmqAtomicCounterValue(lutok2::State & state){
+		Stack * stack = state.stack;
+		if (stack->is<LUA_TUSERDATA>(1)){
+			void * counter = getZMQobject(1);
+			stack->push<int>(zmq_atomic_counter_value(counter));
+			return 1;
+		}
+		return 0;
+	}
+
+	int lua_zmqAtomicCounterInc(lutok2::State & state){
+		Stack * stack = state.stack;
+		if (stack->is<LUA_TUSERDATA>(1)){
+			void * counter = getZMQobject(1);
+			stack->push<int>(zmq_atomic_counter_inc(counter));
+			return 1;
+		}
+		return 0;
+	}
+
+	int lua_zmqAtomicCounterDec(lutok2::State & state){
+		Stack * stack = state.stack;
+		if (stack->is<LUA_TUSERDATA>(1)){
+			void * counter = getZMQobject(1);
+			stack->push<int>(zmq_atomic_counter_dec(counter));
+			return 1;
+		}
+		return 0;
+	}
+
 };
 
 extern "C" LIBLUAZMQ_DLL_EXPORTED int luaopen_luazmq(lua_State * L){
@@ -1144,8 +1309,13 @@ extern "C" LIBLUAZMQ_DLL_EXPORTED int luaopen_luazmq(lua_State * L){
 
 	luazmq_module["socket"] = LuaZMQ::lua_zmqSocket;
 	luazmq_module["close"] = LuaZMQ::lua_zmqClose;
-	luazmq_module["socketSetOption"] = LuaZMQ::lua_zmqSetSockOpt;
-	luazmq_module["socketGetOptionI"] = LuaZMQ::lua_zmqGetSockOptI;
+	luazmq_module["socketSetOptionI32"] = LuaZMQ::lua_zmqSetSockOptI32;
+	luazmq_module["socketSetOptionI64"] = LuaZMQ::lua_zmqSetSockOptI64;
+	luazmq_module["socketSetOptionIptr"] = LuaZMQ::lua_zmqSetSockOptIptr;
+	luazmq_module["socketSetOptionS"] = LuaZMQ::lua_zmqSetSockOptS;
+	luazmq_module["socketGetOptionI32"] = LuaZMQ::lua_zmqGetSockOptI32;
+	luazmq_module["socketGetOptionI64"] = LuaZMQ::lua_zmqGetSockOptI64;
+	luazmq_module["socketGetOptionIptr"] = LuaZMQ::lua_zmqGetSockOptIptr;
 	luazmq_module["socketGetOptionS"] = LuaZMQ::lua_zmqGetSockOptS;
 
 	luazmq_module["bind"] = LuaZMQ::lua_zmqBind;
@@ -1181,6 +1351,13 @@ extern "C" LIBLUAZMQ_DLL_EXPORTED int luaopen_luazmq(lua_State * L){
 	luazmq_module["pollGet"] = LuaZMQ::lua_zmqPollGet;
 	luazmq_module["pollSet"] = LuaZMQ::lua_zmqPollSet;
 	luazmq_module["poll"] = LuaZMQ::lua_zmqPoll;
+
+	luazmq_module["atomicCounterNew"] = LuaZMQ::lua_zmqAtomicCounterNew;
+	luazmq_module["atomicCounterDestroy"] = LuaZMQ::lua_zmqAtomicCounterDestroy;
+	luazmq_module["atomicCounterSet"] = LuaZMQ::lua_zmqAtomicCounterSet;
+	luazmq_module["atomicCounterValue"] = LuaZMQ::lua_zmqAtomicCounterValue;
+	luazmq_module["atomicCounterInc"] = LuaZMQ::lua_zmqAtomicCounterInc;
+	luazmq_module["atomicCounterDec"] = LuaZMQ::lua_zmqAtomicCounterDec;
 
 	luazmq_module["proxy"] = LuaZMQ::lua_zmqProxy;
 #if (ZMQ_VERSION_MAJOR>=4) && (ZMQ_VERSION_MINOR>=0) && (ZMQ_VERSION_PATCH>=5)
