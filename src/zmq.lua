@@ -530,7 +530,7 @@ M.context = function(context, io_threads, DEBUG)
 					end,
 					close = function()
 						if not closed then
-							zmq.close(socket)
+							close(zmq.close(socket))
 							closed = true
 						end
 					end,
@@ -621,7 +621,7 @@ M.context = function(context, io_threads, DEBUG)
 					if DEBUG then
 						print('Closing socket')
 					end
-					lfn.close()
+					assert(lfn.close())
 				end
 				return socket
 			end
@@ -629,7 +629,7 @@ M.context = function(context, io_threads, DEBUG)
 			return setupSocket(socket)
 		end,
 		shutdown = function()
-			zmq.shutdown(context)
+			assert(zmq.shutdown(context))
 		end,
 		thread = function(code, ...)
 			local arg = {...}
@@ -699,7 +699,7 @@ local arg = {]]}
 			if DEBUG then
 				print('Closing context')
 			end
-			zmq.term(context)
+			assert(zmq.term(context))
 		end
 	end
 	return context

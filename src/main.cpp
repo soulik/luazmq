@@ -72,10 +72,15 @@ namespace LuaZMQ {
 	int lua_zmqTerm(lutok2::State & state){
 		Stack * stack = state.stack;
 		if (state.stack->is<LUA_TUSERDATA>(1)){
-			if (zmq_ctx_term(getZMQobject(1)) != 0){
+			int result = zmq_ctx_term(getZMQobject(1));
+			if (result == -1){
 				state.stack->push<bool>(false);
 				lua_pushZMQ_error(state);
 				return 2;
+			}
+			else{
+				state.stack->push<bool>(true);
+				return 1;
 			}
 		}
 		return 0;
@@ -84,10 +89,15 @@ namespace LuaZMQ {
 	int lua_zmqShutdown(lutok2::State & state){
 		Stack * stack = state.stack;
 		if (state.stack->is<LUA_TUSERDATA>(1)){
-			if (zmq_ctx_shutdown(getZMQobject(1)) != 0){
+			int result = zmq_ctx_shutdown(getZMQobject(1));
+			if (result == -1){
 				state.stack->push<bool>(false);
 				lua_pushZMQ_error(state);
 				return 2;
+			}
+			else{
+				state.stack->push<bool>(true);
+				return 1;
 			}
 		}
 		return 0;
@@ -238,10 +248,15 @@ namespace LuaZMQ {
 	int lua_zmqClose(lutok2::State & state){
 		Stack * stack = state.stack;
 		if (stack->is<LUA_TUSERDATA>(1)){
-			if (zmq_close(getZMQobject(1)) != 0){
+			int result = zmq_close(getZMQobject(1));
+			if (result == -1){
 				stack->push<bool>(false);
 				lua_pushZMQ_error(state);
 				return 2;
+			}
+			else{
+				stack->push<bool>(true);
+				return 1;
 			}
 		}
 		return 0;
