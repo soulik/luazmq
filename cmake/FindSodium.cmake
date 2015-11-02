@@ -1,0 +1,2 @@
+if (LUAZMQ_USE_LIBSODIUM)
+endif ()

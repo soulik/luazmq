@@ -1,6 +1,8 @@
 cmake_minimum_required (VERSION 3.1.0)
 project (luazmq)
 
+list(APPEND CMAKE_MODULE_PATH "${luazmq_SOURCE_DIR}/cmake")
+
 set(LUAZMQ_USE_LIBSODIUM ON CACHE BOOL "Build and use internal copy of libsodium")
 
 if (LUAZMQ_USE_LIBSODIUM)
@@ -20,7 +22,9 @@ if (LUAZMQ_USE_LIBSODIUM)
 	    RUNTIME_OUTPUT_DIRECTORY "${CMAKE_BINARY_DIR}/${CMAKE_SYSTEM_PROCESSOR}/bin"
 	)
 	
+	set(SODIUM_FOUND 1)
 	set(SODIUM_LIBRARY $<TARGET_LINKER_FILE:libsodium>)
+	set(SODIUM_LIBRARIES $<TARGET_LINKER_FILE:libsodium>)
 endif()
 
 # Include libzmq
