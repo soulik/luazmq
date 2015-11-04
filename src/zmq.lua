@@ -530,7 +530,7 @@ M.context = function(context, io_threads, DEBUG)
 					end,
 					close = function()
 						if not closed then
-							close(zmq.close(socket))
+							assert(zmq.close(socket))
 							closed = true
 						end
 					end,
@@ -621,7 +621,7 @@ M.context = function(context, io_threads, DEBUG)
 					if DEBUG then
 						print('Closing socket')
 					end
-					assert(lfn.close())
+					lfn.close()
 				end
 				return socket
 			end
