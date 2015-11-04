@@ -1,5 +1,7 @@
 set(luazmq_src
 	main.cpp
+	main.h
+	common.h
 )
 
 set(luazmq_sources

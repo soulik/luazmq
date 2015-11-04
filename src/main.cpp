@@ -33,6 +33,7 @@
 #include <math.h>
 #include <memory.h>
 #include <stdint.h>
+#include "main.h"
 
 namespace LuaZMQ {
 	struct pollArray_t {
