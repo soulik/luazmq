@@ -1309,6 +1309,28 @@ namespace LuaZMQ {
 		return 0;
 	}
 
+	int lua_zmqCurveKeypair(lutok2::State & state){
+		Stack * stack = state.stack;
+		const size_t publicKeySizeZ85 = 41;
+		const size_t privateKeySizeZ85 = 41;
+
+		char publicKeyZ85[publicKeySizeZ85];
+		char privateKeyZ85[privateKeySizeZ85];
+
+		int result = 0;
+
+		if ((result = zmq_curve_keypair(publicKeyZ85, privateKeyZ85)) == 0){
+			stack->pushLString(std::string(publicKeyZ85, publicKeySizeZ85-1));
+			stack->pushLString(std::string(privateKeyZ85, privateKeySizeZ85-1));
+			return 2;
+		}
+		else{
+			stack->push<bool>(false);
+			lua_pushZMQ_error(state);
+			return 2;
+		}
+	}
+
 };
 
 extern "C" LIBLUAZMQ_DLL_EXPORTED int luaopen_luazmq(lua_State * L){
@@ -1391,6 +1413,7 @@ extern "C" LIBLUAZMQ_DLL_EXPORTED int luaopen_luazmq(lua_State * L){
 
 	luazmq_module["Z85Encode"] = LuaZMQ::lua_zmqZ85Encode;
 	luazmq_module["Z85Decode"] = LuaZMQ::lua_zmqZ85Decode;
+	luazmq_module["curveKeypair"] = LuaZMQ::lua_zmqCurveKeypair;
 
 	state->registerLib(luazmq_module);
 	return 1;

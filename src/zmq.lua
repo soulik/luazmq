@@ -876,6 +876,10 @@ M.Z85_decode = function(str)
 	return zmq.Z85Decode(str)
 end
 
+M.curveKeypair = function(str)
+	return zmq.curveKeypair()
+end
+
 M.tohex = function(s, sep)
 	local t = {}
 	for i=1,#s do
