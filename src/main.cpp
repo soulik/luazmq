@@ -667,7 +667,7 @@ namespace LuaZMQ {
 		}
 		return 0;
 	}
-#if (ZMQ_VERSION_MAJOR>=4) && (ZMQ_VERSION_MINOR>=0) && (ZMQ_VERSION_PATCH>=5)
+	
 	int lua_zmqProxySteerable(lutok2::State & state){
 		Stack * stack = state.stack;
 		if (stack->is<LUA_TUSERDATA>(1) && stack->is<LUA_TUSERDATA>(2)){
@@ -682,7 +682,7 @@ namespace LuaZMQ {
 		}
 		return 0;
 	}
-#endif
+
 	int lua_zmqVersion(lutok2::State & state){
 		Stack * stack = state.stack;
 		int major = 0, minor= 0, patch = 0;
@@ -1331,6 +1331,34 @@ namespace LuaZMQ {
 		}
 	}
 
+	int lua_zmqSocketMonitor(lutok2::State & state){
+		Stack * stack = state.stack;
+
+		if (stack->is<LUA_TUSERDATA>(1) && stack->is<LUA_TSTRING>(2)){
+			const std::string endpoint = stack->to<const std::string>(2);
+			int events;
+			if (stack->is<LUA_TNUMBER>(3)){
+				events = stack->to<int>(3);
+			}
+			else{
+				events = ZMQ_EVENT_ALL;
+			}
+
+			int result = zmq_socket_monitor(getZMQobject(1), endpoint.c_str(), events);
+
+			if (result < 0){
+				stack->push<bool>(false);
+				lua_pushZMQ_error(state);
+				return 2;
+			}
+			else{
+				stack->push<int>(result);
+				return 1;
+			}
+		}
+		return 0;
+	}
+
 };
 
 extern "C" LIBLUAZMQ_DLL_EXPORTED int luaopen_luazmq(lua_State * L){
@@ -1398,9 +1426,9 @@ extern "C" LIBLUAZMQ_DLL_EXPORTED int luaopen_luazmq(lua_State * L){
 	luazmq_module["atomicCounterDec"] = LuaZMQ::lua_zmqAtomicCounterDec;
 
 	luazmq_module["proxy"] = LuaZMQ::lua_zmqProxy;
-#if (ZMQ_VERSION_MAJOR>=4) && (ZMQ_VERSION_MINOR>=0) && (ZMQ_VERSION_PATCH>=5)
 	luazmq_module["proxySteerable"] = LuaZMQ::lua_zmqProxySteerable;
-#endif
+
+	luazmq_module["socketMonitor"] = LuaZMQ::lua_zmqSocketMonitor;
 
 	luazmq_module["sleep"] = LuaZMQ::lua_zmqSleep;
 	luazmq_module["stopwatchStart"] = LuaZMQ::lua_zmqStopwatchStart;
