@@ -138,6 +138,9 @@ local constants = {
 
     ZMQ_SERVER =				12,
     ZMQ_CLIENT =				13,
+
+    ZMQ_RADIO =					14,
+    ZMQ_DISH =					15,
                        	
     ZMQ_AFFINITY =				4,
     ZMQ_IDENTITY =				5,
