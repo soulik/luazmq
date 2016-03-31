@@ -43,6 +43,9 @@ namespace LuaZMQ {
 	int lua_zmqMsgSize(State &);
 	int lua_zmqMsgSend(State &);
 	int lua_zmqMsgRecv(State &);
+	int lua_zmqMsgGets(State & state);
+	int lua_zmqMsgGetRoutingID(State & state);
+	int lua_zmqMsgSetRoutingID(State & state);
 
 	int lua_zmqPollNew(State &);
 	int lua_zmqPollFree(State &);
@@ -59,9 +62,7 @@ namespace LuaZMQ {
 	int lua_zmqAtomicCounterDec(State &);
 
 	int lua_zmqProxy(State &);
-#if (ZMQ_VERSION_MAJOR>=4) && (ZMQ_VERSION_MINOR>=0) && (ZMQ_VERSION_PATCH>=5)
 	int lua_zmqProxySteerable(State &);
-#endif
 
 	int lua_zmqSleep(State &);
 	int lua_zmqStopwatchStart(State &);

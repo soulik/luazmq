@@ -888,6 +888,10 @@ M.proxy = function(forward, backend, capture)
 	zmq.proxy(forward, backend, capture)
 end
 
+M.proxySteerable = function(forward, backend, capture, control)
+	zmq.proxySteerable(forward, backend, capture, control)
+end
+
 M.Z85_encode = function(str)
 	return zmq.Z85Encode(str)
 end

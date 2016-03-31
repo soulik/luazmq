@@ -1109,6 +1109,7 @@ namespace LuaZMQ {
 		stack->push<bool>(false);
 		return 1;
 	}
+
 	int lua_zmqMsgGets(lutok2::State & state){
 		Stack * stack = state.stack;
 		if (stack->is<LUA_TUSERDATA>(1) && stack->is<LUA_TSTRING>(2)){
