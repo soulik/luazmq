@@ -585,6 +585,9 @@ M.context = function(context, io_threads, DEBUG)
 							recv = function(flags)
 								return zmq.msgRecv(zmsg, socket, flags)
 							end,
+							gets = function(property)
+								return zmq.msgGets(zmsg, property)
+							end,
 						}
 
 						local mt = getmetatable(zmsg)
@@ -595,6 +598,8 @@ M.context = function(context, io_threads, DEBUG)
 								return (zmq.msgMore(zmsg) == 1)
 							elseif (fn == "data") then
 								return zmq.msgGetData(zmsg)
+							elseif (fn == "routingID") then
+								return zmq.msgGetRoutingID(zmsg)
 							else
 								return lfn[fn]
 							end
@@ -602,6 +607,8 @@ M.context = function(context, io_threads, DEBUG)
 						mt.__newindex = function(t, name, value)
 							if name == "data" then
 								zmq.msgSetData(zmsg, value)
+							elseif (name == "routingID") then
+								return zmq.msgSetRoutingID(zmsg, value)
 							end
 						end
 						mt.__gc = function()
