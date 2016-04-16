@@ -33,6 +33,9 @@
 #include <math.h>
 #include <memory.h>
 #include <stdint.h>
+#include <atomic>
+#include <mutex>
+#include <condition_variable>
 #include "main.h"
 
 namespace LuaZMQ {
@@ -47,6 +50,9 @@ namespace LuaZMQ {
 	struct threadData {
 		std::thread thread;
 		std::string result;
+		std::atomic<bool> finished;
+		std::mutex m;
+		std::condition_variable cv;
 	};
 
 #define BUFFER_SIZE	4096
@@ -131,34 +137,66 @@ namespace LuaZMQ {
 			if (stack->is<LUA_TBOOLEAN>(3)){
 				debug = stack->to<bool>(3);
 			}
+			bool srcCompiled = false;
+
 			//shared variables
 			const std::string code = stack->to<const std::string>(2);
 			void * zmqObj = getZMQobject(1);
 
 			threadData * luaThread = new threadData;
+			luaThread->finished.store(false);
 
-			luaThread->thread = std::thread([&](const std::string & code, void * zmqObj, std::string & result){
+			luaThread->thread = std::thread([&](
+				const std::string & code,
+				void * zmqObj,
+				std::string & result,
+				std::atomic<bool> & finished,
+				bool & srcCompiled,
+				std::condition_variable & cv,
+				std::mutex & m
+			){
 				lutok2::State thread_state = lutok2::State();
 				thread_state.openLibs();
 				try{
-					thread_state.loadString(code);
+					{
+						thread_state.loadString(code);
+						std::lock_guard<std::mutex> lk(m);
+						srcCompiled = true;
+					}
+					cv.notify_one();
 
 					void ** s = static_cast<void**>(thread_state.stack->newUserData(sizeof(void*)));
 					*s = zmqObj;
 					thread_state.stack->newTable();
 					thread_state.stack->setMetatable();
 
-					thread_state.stack->pcall(1,0,0);
-				}catch(std::exception & e){
-					result = e.what();
-					if (debug){
-						printf("Thread error: %s\n",e.what());
-					}
+					thread_state.stack->pcall(1, 0, 0);
+					finished.store(true);
 				}
-			}, code, zmqObj, std::ref(luaThread->result));
-			
-			pushUData(luaThread);
-			return 1;
+				catch (std::exception & e){
+					finished.store(true);
+					srcCompiled = true;
+					result = e.what();
+					cv.notify_one();
+				}
+			}, code, zmqObj, std::ref(luaThread->result), std::ref(luaThread->finished), std::ref(srcCompiled), std::ref(luaThread->cv), std::ref(luaThread->m));
+
+			std::unique_lock<std::mutex> lk(luaThread->m);
+			luaThread->cv.wait(lk, [&]{return srcCompiled; });
+
+			if (luaThread->finished.load()){
+				stack->push<bool>(false);
+				stack->push<const std::string &>(luaThread->result);
+				if (luaThread->thread.joinable()){
+					luaThread->thread.join();
+				}
+				delete luaThread;
+				return 2;
+			}
+			else{
+				pushUData(luaThread);
+				return 1;
+			}
 		}else{
 			stack->push<bool>(false);
 			stack->push<const std::string &>("Two parameters are expected: ZMQ context and thread code!");
@@ -171,10 +209,15 @@ namespace LuaZMQ {
 		Stack * stack = state.stack;
 		if (stack->is<LUA_TUSERDATA>(1)){
 			threadData * luaThread = getThread(1);
-			stack->push<const std::string &>(luaThread->result);
+			if (luaThread->finished.load()){
+				stack->push<const std::string &>(luaThread->result);
+			}
+			else{
+				stack->push<bool>(false);
+			}
 			return 1;
 		}
-		return 1;
+		return 0;
 	}
 
 	int lua_zmqJoinThread(lutok2::State & state){
@@ -182,10 +225,20 @@ namespace LuaZMQ {
 		if (stack->is<LUA_TUSERDATA>(1)){
 			threadData * luaThread = getThread(1);
 			if (luaThread->thread.joinable()){
-				luaThread->thread.join();
+				try{
+					luaThread->thread.join();
+				}
+				catch (std::exception & e){
+					luaThread->result = e.what();
+					stack->push<bool>(false);
+					stack->push<const char *>(e.what());
+					return 2;
+				}
 			}else{
 				luaThread->thread.detach();
 			}
+			stack->push<bool>(true);
+			return 1;
 		}
 		return 0;
 	}
@@ -194,6 +247,18 @@ namespace LuaZMQ {
 		Stack * stack = state.stack;
 		if (stack->is<LUA_TUSERDATA>(1)){
 			threadData * luaThread = getThread(1);
+			if (luaThread->thread.joinable()){
+				try{
+					luaThread->thread.join();
+				}
+				catch (std::exception & e){
+					delete luaThread;
+					state.error("%s", e.what());
+				}
+			}
+			else{
+				luaThread->thread.detach();
+			}
 			delete luaThread;
 		}
 		return 0;

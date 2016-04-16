@@ -676,7 +676,7 @@ local arg = {]]}
 			table.insert(finalCode, code)
 			local code = table.concat(finalCode)
 
-			local thread = zmq.thread(context, code, DEBUG)
+			local thread = assert(zmq.thread(context, code, DEBUG))
 			local mt = getmetatable(thread)
 			local lfn = {
 				join = function()
