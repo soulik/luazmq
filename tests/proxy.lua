@@ -60,7 +60,7 @@ local capture = [[
 ]]
 
 local controller = [[
-	local name = "Thread 3"
+	local name = "Thread 4"
 
 	local socket,msg = assert(context.socket(zmq.ZMQ_PUSH))
 

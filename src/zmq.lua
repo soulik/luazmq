@@ -142,6 +142,9 @@ local constants = {
     ZMQ_RADIO =					14,
     ZMQ_DISH =					15,
                        	
+	ZMQ_GATHER =				16,
+	ZMQ_SCATTER =				17,
+
     ZMQ_AFFINITY =				4,
     ZMQ_IDENTITY =				5,
     ZMQ_SUBSCRIBE =				6,

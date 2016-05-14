@@ -26,6 +26,8 @@ namespace LuaZMQ {
 	int lua_zmqSend(State &);
 	int lua_zmqGet(State &);
 	int lua_zmqSet(State &);
+	int lua_zmqJoin(State &);
+	int lua_zmqLeave(State &);
 
 	int lua_zmqRecvAll(State &);
 	int lua_zmqRecvMultipart(State &);
@@ -46,6 +48,8 @@ namespace LuaZMQ {
 	int lua_zmqMsgGets(State & state);
 	int lua_zmqMsgGetRoutingID(State & state);
 	int lua_zmqMsgSetRoutingID(State & state);
+	int lua_zmqMsgGetGroup(State & state);
+	int lua_zmqMsgSetGroup(State & state);
 
 	int lua_zmqPollNew(State &);
 	int lua_zmqPollFree(State &);

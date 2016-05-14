@@ -34,7 +34,15 @@ local poll = zmq.poll {
 }
 
 local thread = context.thread(req, 'Request part')
-poll.start()
 
-thread.join()
+while true do
+	poll.start(100)
+	local result = thread.result()
+	if result then
+		print(result)
+		break
+	end
+end
+
+print(thread.join())
 socket.close()

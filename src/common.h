@@ -27,6 +27,10 @@
 	OF THIS SOFTWARE, EVEN IF ADVISED OF THE POSSIBILITY OF SUCH DAMAGE.
 */
 
+#ifndef ZMQ_BUILD_DRAFT_API
+#	define ZMQ_BUILD_DRAFT_API 1
+#endif
+
 #include <zmq.h>
 
 #include <lutok2/lutok2.hpp>

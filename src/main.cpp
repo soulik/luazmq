@@ -292,6 +292,44 @@ namespace LuaZMQ {
 		return 0;
 	}
 
+	int lua_zmqJoin(lutok2::State & state){
+		Stack * stack = state.stack;
+		if (stack->is<LUA_TUSERDATA>(1) && stack->is<LUA_TSTRING>(2)){
+			const std::string groupName = stack->toLString(2);
+			int result = zmq_join(getZMQobject(1), groupName.c_str());
+			if (result == -1){
+				stack->push<bool>(false);
+				lua_pushZMQ_error(state);
+				return 2;
+			}
+			else{
+				stack->push<bool>(true);
+				return 1;
+			}
+		} else{
+			return 0;
+		}
+	}
+	
+	int lua_zmqLeave(lutok2::State & state){
+		Stack * stack = state.stack;
+		if (stack->is<LUA_TUSERDATA>(1) && stack->is<LUA_TSTRING>(2)){
+			const std::string groupName = stack->toLString(2);
+			int result = zmq_leave(getZMQobject(1), groupName.c_str());
+			if (result == -1){
+				stack->push<bool>(false);
+				lua_pushZMQ_error(state);
+				return 2;
+			}
+			else{
+				stack->push<bool>(true);
+				return 1;
+			}
+		} else{
+			return 0;
+		}
+	}
+
 	int lua_zmqSocket(lutok2::State & state){
 		Stack * stack = state.stack;
 		if (stack->is<LUA_TUSERDATA>(1) && stack->is<LUA_TNUMBER>(2)){
@@ -1196,6 +1234,40 @@ namespace LuaZMQ {
 		return 0;
 	}
 
+	int lua_zmqMsgGetGroup(State & state){
+		Stack * stack = state.stack;
+		if (stack->is<LUA_TUSERDATA>(1)){
+			zmq_msg_t * msg = static_cast<zmq_msg_t*>(getZMQobject(1));
+			if (msg){
+				const char * groupName = zmq_msg_group(msg);
+				stack->push<const char *>(groupName);
+				return 1;
+			}
+		}
+		return 0;
+	}
+
+	int lua_zmqMsgSetGroup(State & state){
+		Stack * stack = state.stack;
+		if (stack->is<LUA_TUSERDATA>(1) && stack->is<LUA_TSTRING>(2)){
+			zmq_msg_t * msg = static_cast<zmq_msg_t*>(getZMQobject(1));
+			if (msg){
+				const std::string groupName = stack->toLString(2);
+				int result = zmq_msg_set_group(msg, groupName.c_str());
+				if (result == -1){
+					stack->push<bool>(false);
+					lua_pushZMQ_error(state);
+					return 2;
+				}
+				else{
+					stack->push<bool>(true);
+					return 1;
+				}
+			}
+		}
+		return 0;
+	}
+
 	int lua_zmqMsgGetRoutingID(lutok2::State & state){
 		Stack * stack = state.stack;
 		if (stack->is<LUA_TUSERDATA>(1)){
@@ -1523,6 +1595,8 @@ extern "C" LIBLUAZMQ_DLL_EXPORTED int luaopen_luazmq(lua_State * L){
 	luazmq_module["send"] = LuaZMQ::lua_zmqSend;
 	luazmq_module["get"] = LuaZMQ::lua_zmqGet;
 	luazmq_module["set"] = LuaZMQ::lua_zmqSet;
+	luazmq_module["join"] = LuaZMQ::lua_zmqJoin;
+	luazmq_module["leave"] = LuaZMQ::lua_zmqLeave;
 
 	luazmq_module["recvAll"] = LuaZMQ::lua_zmqRecvAll;
 	luazmq_module["recvMultipart"] = LuaZMQ::lua_zmqRecvMultipart;
@@ -1537,7 +1611,9 @@ extern "C" LIBLUAZMQ_DLL_EXPORTED int luaopen_luazmq(lua_State * L){
 
 	luazmq_module["msgGetRoutingID"] = LuaZMQ::lua_zmqMsgGetRoutingID;
 	luazmq_module["msgSetRoutingID"] = LuaZMQ::lua_zmqMsgSetRoutingID;
-	
+	luazmq_module["msgGetGroup"] = LuaZMQ::lua_zmqMsgGetGroup;
+	luazmq_module["msgSetGroup"] = LuaZMQ::lua_zmqMsgSetGroup;
+
 	luazmq_module["msgGet"] = LuaZMQ::lua_zmqMsgGet;
 	luazmq_module["msgSet"] = LuaZMQ::lua_zmqMsgSet;
 	luazmq_module["msgGets"] = LuaZMQ::lua_zmqMsgGets;
