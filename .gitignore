@@ -7,3 +7,7 @@
 *.so.*
 build/*
 tests/zmq.lua
+tests/*.dll
+tests/*.exe
+tests/jit/*.*
+tests/rel/*.*
