@@ -820,6 +820,7 @@ M.poll = function(initPollItems)
 					end
 				end
 			end
+			return signaledItems
 		end,
 		add = function(s, flags, fn)
 			local rawSocket = getRawSocket(s)
