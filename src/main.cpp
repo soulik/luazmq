@@ -36,6 +36,8 @@
 #include <atomic>
 #include <mutex>
 #include <condition_variable>
+#include <iostream>
+#include <sstream>
 #include "main.h"
 
 namespace LuaZMQ {
@@ -53,7 +55,12 @@ namespace LuaZMQ {
 		std::atomic<bool> finished;
 		std::mutex m;
 		std::condition_variable cv;
+		void * socket;
+		void * context;
+		bool ownContext;
 	};
+
+	const std::string threadSocketNamePrefix = "inproc://luathread_";
 
 #define BUFFER_SIZE	4096
 #define MAX_BUFFER_SIZE 1024*1024*16	//Maximum buffer size for recvMultipart
@@ -129,18 +136,441 @@ namespace LuaZMQ {
 	}
 #endif
 
+	int lua_zmqGracefulThreadQuit(lutok2::State & state, threadData * luaThread, std::function<int(std::exception & e)> failFn) {
+		int rc = 0;
+		if (luaThread->thread.joinable()) {
+			try {
+				luaThread->thread.join();
+			}
+			catch (std::exception & e) {
+				rc = failFn(e);
+			}
+		}
+		else {
+			luaThread->thread.detach();
+		}
+		if (luaThread->ownContext) {
+			zmq_ctx_term(luaThread->context);
+		}
+		delete luaThread;
+		return rc;
+	}
+
+	const std::string getThreadSocketName(const std::thread::id threadId) {
+		std::string socketName = threadSocketNamePrefix;
+		std::stringstream ss;
+		ss << threadId;
+		socketName.append(ss.str());
+		return socketName;
+	}
+
+	const std::string lua_zmqRecvString(void * socket, int & more) {
+		std::string buffer;
+		zmq_msg_t msg;
+		int rc = 0;
+
+		zmq_msg_init(&msg);
+		rc = zmq_msg_recv(&msg, socket, 0);
+		assert(rc >= 0);
+		buffer = std::string(reinterpret_cast<char*>(zmq_msg_data(&msg)), zmq_msg_size(&msg));
+		more = zmq_msg_more(&msg);
+		zmq_msg_close(&msg);
+		return buffer;
+	}
+
+	const int lua_zmqRecvInt(void * socket, int & more) {
+		int buffer = -1;
+		zmq_msg_t msg;
+		int rc = 0;
+
+		zmq_msg_init(&msg);
+		rc = zmq_msg_recv(&msg, socket, 0);
+		assert(rc >= 0);
+		if (zmq_msg_size(&msg) >= sizeof(buffer)) {
+			memcpy(&buffer, zmq_msg_data(&msg), sizeof(buffer));
+		}
+		more = zmq_msg_more(&msg);
+		zmq_msg_close(&msg);
+		return buffer;
+	}
+
+	const LUA_NUMBER lua_zmqRecvNumber(void * socket, int & more) {
+		LUA_NUMBER buffer = -1;
+		zmq_msg_t msg;
+		int rc = 0;
+
+		zmq_msg_init(&msg);
+		rc = zmq_msg_recv(&msg, socket, 0);
+		assert(rc >= 0);
+		if (zmq_msg_size(&msg) >= sizeof(buffer)) {
+			memcpy(&buffer, zmq_msg_data(&msg), sizeof(buffer));
+		}
+		more = zmq_msg_more(&msg);
+		zmq_msg_close(&msg);
+		return buffer;
+	}
+
+	const intptr_t lua_zmqRecvIntptr(void * socket, int & more) {
+		intptr_t buffer = -1;
+		zmq_msg_t msg;
+		int rc = 0;
+
+		zmq_msg_init(&msg);
+		rc = zmq_msg_recv(&msg, socket, 0);
+		assert(rc >= 0);
+		if (zmq_msg_size(&msg) >= sizeof(buffer)) {
+			memcpy(&buffer, zmq_msg_data(&msg), sizeof(buffer));
+		}
+		more = zmq_msg_more(&msg);
+		zmq_msg_close(&msg);
+		return buffer;
+	}
+
+	int lua_zmqGetThreadArguments(lutok2::State & state, void * socket) {
+		int argumentsCount = 0;
+		int rc = 0;
+		Stack * stack = state.stack;
+		int more = 0;
+		
+		std::string buffer;
+
+		buffer = lua_zmqRecvString(socket, more);
+		if ((buffer.compare("set_arguments") == 0) && more) {
+			argumentsCount = lua_zmqRecvInt(socket, more);
+		}
+
+		for (int index=0; index < argumentsCount; index++) {
+			int argumentIndex = 0;
+			int argumentType = 0;
+
+			LUA_NUMBER argumentValueNumber;
+			std::string argumentValue;
+			intptr_t argumentValuePointer;
+			void ** argumentValuePointerSpecial;
+
+			argumentIndex = lua_zmqRecvInt(socket, more);
+			if (more) {
+				argumentType = lua_zmqRecvInt(socket, more);
+				if (more) {
+					if (argumentType == LUA_TNUMBER) {
+						argumentValueNumber = lua_zmqRecvNumber(socket, more);
+					}else if ((argumentType == LUA_TLIGHTUSERDATA) || (argumentType == LUA_TUSERDATA)) {
+						argumentValuePointer = lua_zmqRecvIntptr(socket, more);
+					}else {
+						argumentValue = lua_zmqRecvString(socket, more);
+					}
+
+					switch (argumentType) {
+						case LUA_TNUMBER:
+							stack->push<LUA_NUMBER>(argumentValueNumber);
+							break;
+						case LUA_TSTRING:
+							stack->pushLString(argumentValue.c_str(), argumentValue.length());
+							break;
+						case LUA_TFUNCTION:
+							state.loadString(argumentValue);
+							break;
+						case LUA_TLIGHTUSERDATA:
+							stack->push<void*>(reinterpret_cast<void*>(argumentValuePointer));
+							break;
+						case LUA_TUSERDATA:
+							argumentValuePointerSpecial = static_cast<void**>(stack->newUserData(sizeof(void*)));
+							*argumentValuePointerSpecial = reinterpret_cast<void*>(argumentValuePointer);
+							stack->newTable();
+							stack->setMetatable();
+							break;
+							//set nil for unsupported type
+						case LUA_TNIL:
+						default:
+							stack->pushNil();
+							break;
+					}
+				}
+			}
+		}
+
+		return argumentsCount;
+	}
+
+	void lua_zmqSetThreadArguments(lutok2::State & state, void * socket, int argumentsCount) {
+		Stack * stack = state.stack;
+		const std::string strMsg = "set_arguments";
+		int outArgumentsCount = argumentsCount;
+		zmq_send(socket, strMsg.c_str(), strMsg.length(), ZMQ_SNDMORE);
+		zmq_send(socket, &outArgumentsCount, sizeof(outArgumentsCount), 0);
+
+		if (argumentsCount>=1) {
+			for (int index = 2; index <= argumentsCount+1; index++) {
+				int argumentType = stack->type(index);
+
+				int argNum = (index - 1);
+				int argType = argumentType;
+
+				LUA_NUMBER argValueNum;
+				std::string argValue;
+				intptr_t argValuePtr;
+
+				switch (argumentType) {
+					case LUA_TNUMBER:
+						argValueNum = stack->to<LUA_NUMBER>(index);
+						break;
+					case LUA_TSTRING:
+						argValue = stack->toLString(index);
+						break;
+					case LUA_TFUNCTION:
+						argValue = stack->dumpFunction(index);
+						break;
+					case LUA_TLIGHTUSERDATA:
+						argValuePtr = reinterpret_cast<intptr_t>(getZMQobject(index));
+						break;
+					case LUA_TUSERDATA:
+						argValuePtr = reinterpret_cast<intptr_t>(getZMQobject(index));
+						break;
+						//set nil for unsupported type
+					case LUA_TNIL:
+					default:
+						argType = LUA_TNIL;
+						argValue = "";
+						break;
+				}
+
+				zmq_send(socket, &argNum, sizeof(argNum), ZMQ_SNDMORE);
+				zmq_send(socket, &argType, sizeof(argType), ZMQ_SNDMORE);
+				if (argType == LUA_TNUMBER) {
+					zmq_send(socket, &argValueNum, sizeof(argValueNum), 0);
+				}else if ((argType == LUA_TLIGHTUSERDATA) || ((argType == LUA_TUSERDATA))) {
+					zmq_send(socket, &argValuePtr, sizeof(argValuePtr), 0);
+				}else {
+					zmq_send(socket, argValue.c_str(), argValue.length(), 0);
+				}
+			}
+		}
+	}
+
+	void lua_zmqThreadFunction(void * context, std::string code) {
+		lutok2::State state = lutok2::State();
+		Stack * stack = state.stack;
+
+		int rc = 0;
+		const char * errStr = nullptr;
+
+		//thread communication socket
+		const std::string socketName = getThreadSocketName(std::this_thread::get_id());
+
+		void * socket = zmq_socket(context, ZMQ_PAIR);
+
+		if (!socket) {
+			// It may fail here if there are too many threads
+			errStr = zmq_strerror(zmq_errno());
+			std::cerr << errStr << "\n";
+		}
+		assert(socket);
+
+		rc = zmq_connect(socket, socketName.c_str());
+		assert(rc == 0);
+
+		char msg[BUFFER_SIZE];
+
+		try{
+			state.openLibs();
+
+			state.loadString(code);
+
+			// ready to execute
+			rc = 0;
+#ifdef _WIN32
+			strcpy_s(msg, BUFFER_SIZE, "ok_init");
+#else
+			strcpy(msg, "ok_init");
+#endif
+			zmq_send(socket, &rc, sizeof(rc), ZMQ_SNDMORE);
+			zmq_send(socket, msg, strlen(msg), 0);
+
+			int top = stack->getTop();
+
+			int argumentCount = lua_zmqGetThreadArguments(state, socket);
+			top = stack->getTop();
+
+			stack->pcall(argumentCount, 0, 0);
+
+			// normal thread termination
+			rc = 0;
+#ifdef _WIN32
+			strcpy_s(msg, BUFFER_SIZE, "ok_term");
+#else
+			strcpy(msg, "ok_term");
+#endif
+
+			zmq_send(socket, &rc, sizeof(rc), ZMQ_SNDMORE);
+			zmq_send(socket, msg, strlen(msg), 0);
+		} catch (std::exception & e) {
+			int rc2 = snprintf(msg, BUFFER_SIZE, "Exception: %s", e.what());
+			rc = 1;
+
+			if (rc2>0) {
+				zmq_send(socket, &rc, sizeof(rc), ZMQ_SNDMORE);
+				zmq_send(socket, msg, rc2, 0);
+			}else {
+				zmq_send(socket, &rc, sizeof(rc), ZMQ_SNDMORE);
+				zmq_send(socket, msg, BUFFER_SIZE, 0);
+			}
+		}
+		rc = zmq_close(socket);
+		assert(rc == 0);
+	}
+
+	int lua_zmqThreadRead(void * socket, int & thread_rc, std::string & buffer) {
+		int rc = 0;
+
+		// get the return code part
+		rc = zmq_recv(socket, &thread_rc, sizeof(thread_rc), 0);
+		assert(rc >= 0);
+
+		// get the message part
+		int more = 0;
+
+		size_t more_size = sizeof(more);
+		rc = zmq_getsockopt(socket, ZMQ_RCVMORE, &more, &more_size);
+		assert(rc == 0);
+
+		if (more == 1) {
+			char msg[BUFFER_SIZE];
+			rc = zmq_recv(socket, msg, BUFFER_SIZE, 0);
+			assert(rc >= 0);
+			buffer.assign(std::string(msg, rc));
+
+			return 2;
+		} else {
+			return 1;
+		}
+	}
+
+	int lua_zmqThread2(lutok2::State & state) {
+		Stack * stack = state.stack;
+		int parameters_count = stack->getTop();
+		if ((parameters_count >= 1) && (stack->is<LUA_TFUNCTION>(1) || stack->is<LUA_TSTRING>(1))) {
+			int rc = 0;
+			std::string code;
+			void * context = nullptr;
+			threadData * luaThread = new threadData;
+
+			if (stack->is<LUA_TUSERDATA>(2)) {
+				context = getZMQobject(2);
+				luaThread->ownContext = false;
+			}else {
+				context = zmq_ctx_new();
+				luaThread->ownContext = true;
+			}
+			luaThread->context = context;
+
+			try {
+				if (stack->is<LUA_TFUNCTION>(1)) {
+					code = stack->dumpFunction(1);
+				}else {
+					code = stack->toLString(1);
+				}
+
+				luaThread->socket = zmq_socket(context, ZMQ_PAIR);
+				assert(luaThread->socket);
+
+				luaThread->thread = std::thread(lua_zmqThreadFunction, context, code);
+
+				const std::string socketName = getThreadSocketName(luaThread->thread.get_id());
+
+				rc = zmq_bind(luaThread->socket, socketName.c_str());
+				assert(rc == 0);
+
+				// is thread ready?
+				int return_values = 0;
+				int thread_rc = 0;
+				std::string message;
+
+				rc = lua_zmqThreadRead(luaThread->socket, thread_rc, message);
+
+				if ((thread_rc == 0) && (message.compare("ok_init") == 0)){
+					lua_zmqSetThreadArguments(state, luaThread->socket, parameters_count-1);
+
+					pushUData(luaThread);
+					return 1;
+				}else {
+					if (rc == 2) {
+						stack->push<bool>(false);
+						stack->push<const std::string &>(message);
+						return_values = 2;
+					}
+					else {
+						stack->push<bool>(false);
+						return_values = 1;
+					}
+
+					rc = lua_zmqGracefulThreadQuit(state, luaThread, [&](std::exception & e) -> int {
+						state.error("%s", e.what());
+						return 0;
+					});
+
+					return return_values;
+				}
+			}catch(std::exception & e){
+				rc = lua_zmqGracefulThreadQuit(state, luaThread, [&](std::exception & e) -> int {
+					state.error("%s", e.what());
+					return 0;
+				});
+
+				stack->push<bool>(false);
+				stack->push<const std::string &>(e.what());
+				return 2;
+			}
+		}
+		return 0;
+	}
+
+	int lua_zmqFreeThread2(lutok2::State & state) {
+		Stack * stack = state.stack;
+		if (stack->is<LUA_TUSERDATA>(1)) {
+			threadData * luaThread = getThread(1);
+
+			int rc = 0;
+			int thread_rc = 0;
+			std::string message;
+
+			rc = lua_zmqThreadRead(luaThread->socket, thread_rc, message);
+
+			rc = zmq_close(luaThread->socket);
+			assert(rc == 0);
+
+			if (thread_rc == 0) {
+				lua_zmqGracefulThreadQuit(state, luaThread,
+												 [&](std::exception & e) -> int {
+					state.error("%s", e.what());
+					return 0;
+				});
+			}else {
+				lua_zmqGracefulThreadQuit(state, luaThread,
+										  [&](std::exception & e) -> int {
+					state.error("%s", e.what());
+					return 0;
+				});
+				std::cerr << message << "\n";
+			}
+		}
+		return 0;
+	}
+
 	int lua_zmqThread(lutok2::State & state){
 		Stack * stack = state.stack;
 		int parameters_count = stack->getTop();
-		if ((parameters_count >= 2) && stack->is<LUA_TUSERDATA>(1) && stack->is<LUA_TSTRING>(2)){
-			bool debug = false;
-			if (stack->is<LUA_TBOOLEAN>(3)){
-				debug = stack->to<bool>(3);
-			}
+		if ((parameters_count >= 2) && stack->is<LUA_TUSERDATA>(1) && (stack->is<LUA_TSTRING>(2) | stack->is<LUA_TFUNCTION>(2))){
 			bool srcCompiled = false;
 
 			//shared variables
-			const std::string code = stack->to<const std::string>(2);
+			std::string code;
+			
+			if (stack->is<LUA_TFUNCTION>(2)) {
+				code = stack->dumpFunction(2);
+			}else if (stack->is<LUA_TSTRING>(2)) {
+				code = stack->to<const std::string>(2);
+			}
+			
 			void * zmqObj = getZMQobject(1);
 
 			threadData * luaThread = new threadData;
@@ -224,6 +654,7 @@ namespace LuaZMQ {
 		Stack * stack = state.stack;
 		if (stack->is<LUA_TUSERDATA>(1)){
 			threadData * luaThread = getThread(1);
+
 			if (luaThread->thread.joinable()){
 				try{
 					luaThread->thread.join();
@@ -925,7 +1356,7 @@ namespace LuaZMQ {
 				}
 				zmq_getsockopt(socket, ZMQ_RCVMORE, &more, &moreSize);
 			}
-			if (partNum==1 && filledPartNum>0){
+			if (partNum>=1 && filledPartNum>0){
 				stack->push<int>(partNum);
 				stack->pushLString(std::string(fullBuffer.c_str(), fullBuffer.length()));
 				stack->setTable();
@@ -1649,6 +2080,9 @@ extern "C" LIBLUAZMQ_DLL_EXPORTED int luaopen_luazmq(lua_State * L){
 	luazmq_module["joinThread"] = LuaZMQ::lua_zmqJoinThread;
 	luazmq_module["freeThread"] = LuaZMQ::lua_zmqFreeThread;
 	luazmq_module["getThreadResult"] = LuaZMQ::lua_zmqGetThreadResult;
+
+	luazmq_module["thread2"] = LuaZMQ::lua_zmqThread2;
+	luazmq_module["freeThread2"] = LuaZMQ::lua_zmqFreeThread2;
 
 	luazmq_module["Z85Encode"] = LuaZMQ::lua_zmqZ85Encode;
 	luazmq_module["Z85Decode"] = LuaZMQ::lua_zmqZ85Decode;

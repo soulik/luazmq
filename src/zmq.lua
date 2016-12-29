@@ -257,6 +257,7 @@ local constants = {
 	ZMQ_SOCKET_LIMIT = 			3,
 	ZMQ_THREAD_PRIORITY = 		3,
 	ZMQ_THREAD_SCHED_POLICY = 	4,
+	ZMQ_MAX_MSGSZ = 			5,
 
 	ZMQ_IO_THREADS_DFLT = 		1,
 	ZMQ_MAX_SOCKETS_DFLT = 		1023,
@@ -325,6 +326,11 @@ local socket_option_names = {
 	['XPUB_MANUAL'] =			constants.ZMQ_XPUB_MANUAL,
 	['XPUB_WELCOME_MSG'] =		constants.ZMQ_XPUB_WELCOME_MSG,
 	['STREAM_NOTIFY'] =			constants.ZMQ_STREAM_NOTIFY,
+
+	['IO_THREADS'] =			constants.ZMQ_IO_THREADS,
+	['MAX_SOCKETS'] =			constants.ZMQ_MAX_SOCKETS,
+	['MAX_MSGSZ'] =				constants.ZMQ_MAX_MSGSZ,
+	['SOCKET_LIMIT'] =			constants.ZMQ_SOCKET_LIMIT,
 }
 
 local socket_options = {
@@ -388,6 +394,11 @@ local socket_options = {
 	[constants.ZMQ_XPUB_MANUAL] =			'b',
 	[constants.ZMQ_XPUB_WELCOME_MSG] =		'b',
 	[constants.ZMQ_STREAM_NOTIFY] =			'b',
+
+	[constants.ZMQ_IO_THREADS] =			'i',
+	[constants.ZMQ_MAX_SOCKETS] =			'i',
+	[constants.ZMQ_MAX_MSGSZ] =				'i',
+	[constants.ZMQ_SOCKET_LIMIT] =			'i',
 }
 
 local setupSocket
@@ -534,6 +545,31 @@ M.context = function(context, io_threads, DEBUG)
 					recvMultipart = function(bufferLength)
 						return zmq.recvMultipart(socket, flags, bufferLength or DEFAULT_BUFFER_SIZE)
 					end,
+					recvMultipart2 = function(bufferLength)
+						local out = {}
+						local part = {}
+						local ti, tc = table.insert, table.concat
+
+						repeat
+							local data = assert(zmq.recv(socket, buffer_size or DEFAULT_BUFFER_SIZE))
+                            if type(data)=='string' then
+                                if #data>0 then
+                                    ti(part, data)
+                                else
+                                    ti(out, tc(part))
+                                    part = {}
+                                end
+                            end
+                        until (not (zmq.socketGetOptionI32(socket, constants.ZMQ_RCVMORE) == 1))
+
+                        -- flush all parts
+                        if #part > 0 then
+                            ti(out, tc(part))
+                            part = {}
+                        end
+
+                        return out
+                    end,
 					sendMultipart = function(t, flags, bufferLength)
 						return zmq.sendMultipart(socket, t, flags, bufferLength or DEFAULT_BUFFER_SIZE)
 					end,
@@ -654,6 +690,35 @@ M.context = function(context, io_threads, DEBUG)
 		shutdown = function()
 			assert(zmq.shutdown(context))
 		end,
+		thread2 = function(fn, ...)
+			local thread = assert(zmq.thread2(fn,context, ...))
+			local mt = getmetatable(thread)
+
+			mt.__freed = false
+
+			local lfn = {
+				join = function()
+					local mt = getmetatable(thread)
+					if not mt.__freed then
+						zmq.freeThread2(thread)
+						mt.__freed = true
+					end
+				end,
+			}
+			mt.__index = function(t, fn)
+				return lfn[fn]
+			end
+			mt.__gc = function()
+				local mt = getmetatable(thread)
+				if not mt.__freed then
+					zmq.freeThread2(thread)
+					mt.__freed = true
+				end
+			end
+
+			return thread
+		end,
+
 		thread = function(code, ...)
 			local arg = {...}
 			local finalCode = {[[
