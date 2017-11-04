@@ -333,7 +333,17 @@ local socket_option_names = {
 	['SOCKET_LIMIT'] =			constants.ZMQ_SOCKET_LIMIT,
 }
 
-local socket_options = {
+local context_options_types = {
+	[constants.ZMQ_BLOCKY] =				'b',
+	[constants.ZMQ_IO_THREADS] =			'i',
+	[constants.ZMQ_THREAD_SCHED_POLICY] =	'i',
+	[constants.ZMQ_THREAD_PRIORITY] =		'i',
+	[constants.ZMQ_MAX_MSGSZ] =				'i',
+	[constants.ZMQ_MAX_SOCKETS] =			'i',
+    [constants.ZMQ_IPV6] =					'b',
+}
+
+local socket_options_types = {
     [constants.ZMQ_AFFINITY] =				'i64',
     [constants.ZMQ_IDENTITY] =				's',
     [constants.ZMQ_SUBSCRIBE] =				's',
@@ -390,15 +400,9 @@ local socket_options = {
 	[constants.ZMQ_HANDSHAKE_IVL] =			'i',
 	[constants.ZMQ_SOCKS_PROXY] =			's',
 	[constants.ZMQ_XPUB_NODROP] =			'b',
-	[constants.ZMQ_BLOCKY] =				'b',
 	[constants.ZMQ_XPUB_MANUAL] =			'b',
 	[constants.ZMQ_XPUB_WELCOME_MSG] =		'b',
 	[constants.ZMQ_STREAM_NOTIFY] =			'b',
-
-	[constants.ZMQ_IO_THREADS] =			'i',
-	[constants.ZMQ_MAX_SOCKETS] =			'i',
-	[constants.ZMQ_MAX_MSGSZ] =				'i',
-	[constants.ZMQ_SOCKET_LIMIT] =			'i',
 }
 
 local setupSocket
@@ -477,7 +481,7 @@ M.context = function(context, io_threads, DEBUG)
 							index = socket_option_names[string.upper(name)]
 						end
 
-						local _type = socket_options[index]
+						local _type = socket_options_types[index]
 						if _type then
 							if _type == 'i32' or _type=='i' then
 								return assert(zmq.socketGetOptionI32(socket, index))
@@ -502,7 +506,7 @@ M.context = function(context, io_threads, DEBUG)
 							index = socket_option_names[string.upper(name)]
 						end
 
-						local _type = socket_options[index]
+						local _type = socket_options_types[index]
 						if _type then
 							if _type == 'i32' or _type == 'i' then
 								return assert(zmq.socketSetOptionI32(socket, index, tonumber(value)))
