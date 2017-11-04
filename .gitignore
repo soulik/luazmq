@@ -5,6 +5,7 @@
 *.user
 *.so
 *.so.*
+bin/*
 build/*
 tests/zmq.lua
 tests/*.dll

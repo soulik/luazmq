@@ -9,7 +9,7 @@ if (LUAZMQ_USE_LIBSODIUM)
 
 	# Include libsodium
 
-	add_subdirectory(dependencies/libsodium)
+	add_subdirectory(dependencies/libsodium EXCLUDE_FROM_ALL)
 	include_directories(dependencies/libsodium/src/libsodium/include)
 	include_directories(dependencies/libsodium/src/libsodium/include/sodium)
 	include_directories("${CMAKE_BINARY_DIR}/dependencies/libsodium/src/libsodium/include")
@@ -30,7 +30,9 @@ endif()
 # Include libzmq
 
 set(ZMQ_BUILD_TESTS OFF CACHE BOOL "Build the tests for ZeroMQ")
-add_subdirectory(dependencies/libzmq)
+set(WITH_PERF_TOOL OFF CACHE BOOL "Build performance test tool")
+
+add_subdirectory(dependencies/libzmq EXCLUDE_FROM_ALL)
 include_directories(dependencies/libzmq/include)
 
 set_target_properties(libzmq
@@ -59,3 +61,13 @@ add_subdirectory(src)
 
 set(CMAKE_RUNTIME_OUTPUT_DIRECTORY build)
 set_target_properties(luazmq PROPERTIES PREFIX "")
+
+install(
+    FILES $<TARGET_FILE:libzmq>
+    DESTINATION ${luazmq_SOURCE_DIR}/bin   
+)
+
+install(
+    FILES $<TARGET_FILE:libsodium>
+    DESTINATION ${luazmq_SOURCE_DIR}/bin   
+)

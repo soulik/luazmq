@@ -1,7 +1,6 @@
-set(luazmq_src
-	main.cpp
-	main.h
-	common.h
+file(GLOB_RECURSE luazmq_src
+	"*.cpp"
+	"*.h"
 )
 
 set(luazmq_sources
@@ -39,4 +38,14 @@ configure_file(zmq.lua ${CMAKE_BINARY_DIR}/${CMAKE_SYSTEM_PROCESSOR}/lib/zmq.lua
 target_link_libraries (luazmq
 	libzmq
 	${LUA_LIBRARY}
+)
+
+install(
+    TARGETS luazmq
+    DESTINATION ${luazmq_SOURCE_DIR}/bin   
+)
+
+install(
+    FILES zmq.lua
+    DESTINATION ${luazmq_SOURCE_DIR}/bin   
 )
